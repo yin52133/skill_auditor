@@ -353,7 +353,7 @@ def render_markdown(report: AuditReport, *, language: str = "en") -> str:
         lines.append(f"- `{suggestion['skill_key']}` [{status}]")
         lines.append(f"  {t['issues']}: {issues}")
         lines.append(f"  {t['what']}: {suggestion['what']}")
-        lines.append(f"  {t['why']}: {_remediation_why(suggestion['status'], language)}")
+        lines.append(f"  {t['why']}: {_remediation_why(suggestion['status'], language, suggestion['issues'])}")
         lines.append(f"  {t['which']}: {suggestion['skill_key']}")
         lines.append(f"  {t['how']}: {suggestion['how']}")
 
@@ -609,11 +609,65 @@ def _zh_active_reason(reason: str) -> str:
     return _ACTIVE_REASON_ZH.get(reason, reason)
 
 
-def _remediation_why(status: str, language: str) -> str:
+def _remediation_why(status: str, language: str, issues: list[str] | None = None) -> str:
+    primary = issues[0] if issues else ""
     if language == "zh":
-        return "当前已被判为无效，需要先修复" if status == "invalid" else "当前不是硬阻断，但已经形成 review debt"
-    return (
+        return _remediation_why_zh(primary, status)
+    return _remediation_why_en(primary, status)
+
+
+def _remediation_why_zh(rule_id: str, status: str) -> str:
+    reasons = {
+        "security.shell.pipe_to_shell":
+            "pipe-to-shell 允许远程服务器直接在本机执行任意代码，一旦上游被篡改会导致供应链攻击",
+        "security.binary.opaque_execution":
+            "从 /tmp 或 Downloads 直接执行二进制，绕过了包管理器的签名校验，且文件内容不在版本控制中",
+        "security.secret.openai_key":
+            "硬编码的 API Key 会随 skill 分发泄露给所有使用者，且无法按人轮换",
+        "security.secret.password_assignment":
+            "硬编码密码即使是示例也容易被误用到生产环境，且会触发安全扫描器的持续告警",
+        "security.secret.private_key":
+            "私钥一旦泄露无法撤销，所有依赖该密钥的认证体系都会被攻破",
+        "structure.skill_md.too_long":
+            "过长的 SKILL.md 会占满 LLM 上下文窗口，挤掉用户实际任务内容，导致 skill 指令被截断或忽略",
+        "schema.frontmatter.unexpected_key":
+            "非标准 frontmatter 字段会被不同生态解析器静默忽略或报错，影响跨平台兼容性",
+        "schema.frontmatter.missing_name":
+            "缺少 name 字段会导致 skill 无法被索引和调度",
+        "schema.frontmatter.missing_description":
+            "缺少 description 会让路由器无法判断何时触发该 skill",
+    }
+    if rule_id.startswith("codex.openai_yaml."):
+        return "openai.yaml 字段缺失会导致 Codex UI 展示异常（图标缺失、描述截断），但不影响 skill 核心功能"
+    if rule_id.startswith("heuristic.trigger."):
+        return "模糊的触发描述会让路由器在相似请求上随机选择 skill，导致用户体验不一致"
+    return reasons.get(rule_id, "当前已被判为无效，需要先修复" if status == "invalid" else "当前不是硬阻断，但已经形成 review debt")
+
+
+def _remediation_why_en(rule_id: str, status: str) -> str:
+    reasons = {
+        "security.shell.pipe_to_shell":
+            "Pipe-to-shell lets a remote server execute arbitrary code locally — a supply-chain attack vector if upstream is compromised",
+        "security.binary.opaque_execution":
+            "Running binaries from /tmp or Downloads bypasses package-manager signature checks and keeps the payload out of version control",
+        "security.secret.openai_key":
+            "A hardcoded API key ships to every skill user and cannot be rotated per-person",
+        "security.secret.password_assignment":
+            "Hardcoded passwords — even examples — get copy-pasted into production and cause persistent scanner noise",
+        "security.secret.private_key":
+            "A leaked private key cannot be revoked without rotating every system that trusts it",
+        "structure.skill_md.too_long":
+            "An oversized SKILL.md crowds out user task content in the LLM context window, causing instructions to be truncated or ignored",
+        "schema.frontmatter.unexpected_key":
+            "Non-standard frontmatter keys are silently dropped or error out across ecosystems, hurting portability",
+    }
+    if rule_id.startswith("codex.openai_yaml."):
+        return "Missing openai.yaml fields cause broken Codex UI display (missing icons, truncated descriptions) but do not affect core skill function"
+    if rule_id.startswith("heuristic.trigger."):
+        return "Vague trigger descriptions cause the router to pick skills semi-randomly on similar requests, producing inconsistent user experience"
+    return reasons.get(
+        rule_id,
         "This skill is currently invalid and should be repaired before wider use"
         if status == "invalid"
-        else "This is review debt rather than a hard blocker, but it is now concrete enough to queue"
+        else "This is review debt rather than a hard blocker, but it is now concrete enough to queue",
     )
