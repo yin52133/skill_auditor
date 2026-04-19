@@ -424,11 +424,20 @@ def scan_security_patterns(instance: SkillInstance) -> list[Finding]:
     return findings
 
 
-def validate_instance(instance: SkillInstance) -> list[Finding]:
+def validate_instance(
+    instance: SkillInstance,
+    *,
+    rule_exceptions: list[str] | None = None,
+) -> list[Finding]:
     parsed_skill = parse_instance_skill(instance)
     findings = validate_frontmatter(instance, parsed_skill)
     findings.extend(validate_openai_yaml(instance, parsed_skill))
     findings.extend(scan_security_patterns(instance))
+    if rule_exceptions:
+        findings = [
+            f for f in findings
+            if f.rule_id.startswith("security.") or f.rule_id not in rule_exceptions
+        ]
     return findings
 
 

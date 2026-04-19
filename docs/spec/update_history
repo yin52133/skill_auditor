@@ -89,3 +89,15 @@
 **Spec refs:** Data and Interface Contracts, Implementation Phases or Rollout Steps
 
 **Checklist ids:** contextual-remediation
+
+---
+
+## v0.2.0 — 2026-04-19
+
+**Summary:** Add batch/bulk management commands, GitHub source detection and classification, sync protection for periodically synced skills, per-skill rule exceptions, and upgrade flow with temp-clone diff.
+
+**Rationale:** Skills synced from external GitHub repositories need source metadata tracking, protection from accidental batch edit overwrites, version tracking via branch/tag/SHA refs, and a safe upgrade path that preserves local annotations (tags, notes, rule exceptions). Batch edits are ledger-only to stay consistent with Core Decision 5 (report-first, not rewrite-first). Official/built-in skills (.system, marketplace) are always protected from batch edits. git_clone sources default to sync_protected=True to prevent accidental annotation loss during re-sync.
+
+**Spec refs:** Data and Interface Contracts, Runtime Flows, Core Decisions (additions: decisions 11 and 12), Ownership or Source of Truth
+
+**Checklist ids:** source-detection, batch-edit, source-management-cli, source-upgrade, rule-exceptions, sync-protection

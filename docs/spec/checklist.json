@@ -98,5 +98,53 @@
       "Implementation Phases or Rollout Steps"
     ],
     "notes": "Finding model extended with line_number and matched_text. Rules now capture source line and code snippet. Remediation suggestions output structured what/how with file path, line number, and step-by-step fix guidance instead of generic template sentences."
+  },
+  {
+    "id": "source-detection",
+    "title": "Implement git_clone, local_repo, and builtin source detection and source_kind classification",
+    "status": "done",
+    "spec_delta": true,
+    "spec_refs": ["Data and Interface Contracts", "Runtime Flows"],
+    "notes": "_detect_git_source() walks up from skill dir to find .git, parses .git/config for remote origin URL, detects builtin skills via .system directory markers. classify_source_kind() extended with builtin, git_clone, local_repo."
+  },
+  {
+    "id": "batch-edit",
+    "title": "Implement batch edit operations (tag, note, protect, allow-rule) for ledger entries",
+    "status": "done",
+    "spec_delta": true,
+    "spec_refs": ["Data and Interface Contracts", "Runtime Flows", "Core Decisions"],
+    "notes": "batch.py module with batch_edit(). Operations are ledger-layer only. Builtin sources auto-skipped; git_clone sync_protected skipped unless --include-protected."
+  },
+  {
+    "id": "source-management-cli",
+    "title": "Implement source list, register, and detect CLI commands",
+    "status": "done",
+    "spec_delta": true,
+    "spec_refs": ["Data and Interface Contracts", "Runtime Flows"],
+    "notes": "skill-auditor source list|register|detect commands. sources.py provides detect_all_sources(), register_source(), list_sources()."
+  },
+  {
+    "id": "source-upgrade",
+    "title": "Implement GitHub source upgrade check and apply flow with temp-clone diff",
+    "status": "done",
+    "spec_delta": true,
+    "spec_refs": ["Data and Interface Contracts", "Runtime Flows", "Core Decisions"],
+    "notes": "upgrade.py implements check_upgrades() and apply_upgrade(). Never modifies tags/note/rule_exceptions/sync_protected."
+  },
+  {
+    "id": "rule-exceptions",
+    "title": "Implement per-skill rule exception allowlisting in validation and audit",
+    "status": "done",
+    "spec_delta": true,
+    "spec_refs": ["Data and Interface Contracts", "Core Decisions"],
+    "notes": "rules.validate_instance() accepts rule_exceptions; security.* rules never suppressed. engine.run_audit() loads from ledger."
+  },
+  {
+    "id": "sync-protection",
+    "title": "Implement sync_protected flag and anti-overwrite protection",
+    "status": "done",
+    "spec_delta": true,
+    "spec_refs": ["Core Decisions", "Runtime Flows"],
+    "notes": "sync_protected defaults true for git_clone. Builtin/plugin_marketplace/plugin_cache auto-skipped in batch. Upgrade preserves all annotations."
   }
 ]

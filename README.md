@@ -22,6 +22,9 @@ This project is intended to:
 - maintain per-skill audit state and source provenance
 - support watch mode and git-hook based audit triggers
 - recommend a smaller active auto-trigger set
+- batch-edit ledger annotations (tags, notes, rule exceptions) across skills
+- track skill sources from GitHub repos and allow batch upgrade
+- protect built-in and synced skills from accidental overwrites
 
 The design explicitly separates:
 
@@ -42,12 +45,11 @@ Included now:
 - deterministic audit pipeline for Codex and Claude-targeted skill folders
 - runtime state writes for audit runs, ledgers, index, clusters, and active set
 - watch-session primitives plus hook installer and hook-run support
+- batch-edit, source management, and upgrade commands for skill lifecycle management
 - pytest coverage for discovery, security, state, overlap, watch, and hook flows
 
 Not included yet:
 
-- remote provenance sync
-- explicit prune flow for stale ledgers
 - richer semantic analysis beyond host-native skipped mode
 
 ## Repository Files

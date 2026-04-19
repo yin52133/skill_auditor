@@ -116,6 +116,14 @@ When a spec change affects an implementation area that is not yet done, the affe
     **Why:** 这个工具的目标是成为两套宿主环境中的直接可用能力，不是再挂一个第三方 API 客户端或外部后端。额外 API key 和服务接口会增加部署成本、泄露面和失效模式。
     **Reversal condition:** 只有当未来明确把外部服务模式定义成独立产品形态，并且与当前 host-native 模式分离时，才允许新增该能力。
 
+11. **What:** 批量编辑只操作 ledger 层；`builtin`、`plugin_marketplace`、`plugin_cache` 来源的 skill 默认不受批量编辑影响。
+    **Why:** Core Decision 5 已确立默认动作是 report 而非 rewrite。批量编辑扩展了这一原则——只允许批量修改 ledger 注释（tags、notes、rule_exceptions），不修改 skill 源文件。官方/内置 skill 由平台维护，不应被用户批量操作覆盖。
+    **Reversal condition:** 未来引入受限的 auto-fix 表面，且每类自动修复有 per-rule opt-in 和回归测试。
+
+12. **What:** `git_clone` 来源的 skill 默认 `sync_protected=True`，批量编辑跳过受保护条目除非显式传入 `--include-protected`。
+    **Why:** 周期性同步的 skill 来自上游仓库。批量编辑不应静默覆盖用户对同步 skill 的注释。保护是用户可切换的标志，不是硬锁。升级操作只更新文件和 fingerprint，不触碰 tags/note/rule_exceptions/sync_protected。
+    **Reversal condition:** 用户明确要求批量编辑默认作用于所有 skill，以 `--protect` 标志作为例外。
+
 ## Runtime Flows
 
 ### Flow 1: Direct audit
@@ -197,6 +205,63 @@ run deterministic checks only
   │
   ▼
 print warnings and allow commit / push
+```
+
+### Flow 4: Batch edit
+
+```text
+caller
+  │
+  ▼
+resolve instance targets (by --selector or explicit instance_ids)
+  │
+  ├── ledger entry not found? ──► skip as missing
+  │
+  ▼
+source_kind in builtin kinds AND --include-builtin not passed?
+  │
+  ├── yes ──► skip as builtin
+  │
+  ▼
+sync_protected=true AND --include-protected not passed?
+  │
+  ├── yes ──► skip as protected
+  │
+  ▼
+apply operations to ledger (add_tag, remove_tag, set_note, add/remove_rule_exception, set_sync_protected)
+  │
+  ▼
+write ledger atomically
+```
+
+### Flow 5: Source upgrade
+
+```text
+caller
+  │
+  ▼
+check_upgrade: ls-remote for each git_clone skill; compare commit SHA
+  │
+  ├── no remote change ──► report up-to-date
+  │
+  ▼
+apply_upgrade: git clone --depth 50 --branch <ref> <url> <tmpdir>
+  │
+  ▼
+diff tmp clone vs local skill directory
+  │
+  ├── dry_run ──► return diff summary without applying
+  │
+  ▼
+copy changed files from tmp clone to local skill dir
+  │
+  ▼
+update ledger: last_fingerprint + last_synced_at
+  │
+  ├── preserve: tags, note, rule_exceptions, sync_protected
+  │
+  ▼
+delete tmp clone
 ```
 
 ## Data and Interface Contracts
@@ -349,6 +414,42 @@ Watch process lifecycle:
 - running multiple watch processes against overlapping roots is allowed; each process operates independently and writes state atomically; no cross-process locking is required for the MVP
 - a PID file or lock file is not required; watch processes do not prevent each other from running
 
+### Runtime entry: `skill-auditor batch`
+
+```text
+skill-auditor batch tag --add <tag> --remove <tag> --selector key=value [--include-protected] [--include-builtin] [--dry-run]
+skill-auditor batch note --set <text> --selector key=value [--include-protected] [--include-builtin] [--dry-run]
+skill-auditor batch protect --on/--off --selector key=value
+skill-auditor batch allow-rule --add <rule_id> --remove <rule_id> --selector key=value [--include-protected] [--include-builtin] [--dry-run]
+
+Selector syntax: ecosystem=codex, source_kind=git_clone, tag=reviewed, path=/path. Multiple selectors AND-ed.
+Builtin sources (builtin, plugin_marketplace, plugin_cache) skipped unless --include-builtin.
+sync_protected=true entries skipped unless --include-protected.
+```
+
+### Runtime entry: `skill-auditor source`
+
+```text
+skill-auditor source list --format text|json
+skill-auditor source register --path <skill-dir> --repo <git-url> [--ref <branch/tag>]
+skill-auditor source detect [paths...] [--all] [--ecosystem host|codex|claude|both]
+
+list: aggregate source records from all ledgers
+register: manually associate a skill path with a git remote URL
+detect: auto-detect git sources for skill directories
+```
+
+### Runtime entry: `skill-auditor upgrade`
+
+```text
+skill-auditor upgrade check [--all] [--format text|json]
+skill-auditor upgrade apply [instance_ids...] [--all] [--dry-run]
+
+check: for each git_clone skill, fetch remote ref and compare commit SHAs
+apply: shallow-clone ref to temp dir, diff, copy files, update ledger fingerprint
+  Never modifies: tags, note, rule_exceptions, sync_protected
+```
+
 ### Persistent object: Skill instance record
 
 | Field | Type | Required | Notes |
@@ -357,7 +458,7 @@ Watch process lifecycle:
 | `skill_key` | string | yes | logical skill identity, usually frontmatter `name` |
 | `ecosystem` | enum | yes | `codex / claude / unknown` |
 | `path` | string | yes | canonical absolute path |
-| `source_kind` | enum | yes | `user_root / plugin_marketplace / plugin_cache / git_clone / local_repo / manual_path / unknown` |
+| `source_kind` | enum | yes | `user_root / plugin_marketplace / plugin_cache / git_clone / local_repo / manual_path / builtin / unknown` |
 | `source` | object | yes | provenance fields; may be partial |
 | `name` | string | yes | parsed frontmatter name or fallback |
 | `description` | string | no | parsed frontmatter description when available |
@@ -387,6 +488,9 @@ Watch process lifecycle:
 | `instance_id` | string | yes | ledger owner |
 | `skill_key` | string | yes | logical skill identity |
 | `note` | string | no | operator-maintained note |
+| `tags` | array | yes | user-assigned labels; default `[]` |
+| `rule_exceptions` | array | yes | rule_ids suppressed per instance; default `[]` |
+| `sync_protected` | bool | yes | true for git_clone sources by default |
 | `updated_at` | timestamp | yes | last ledger write |
 | `change_log` | array | yes | ledger-local maintenance history |
 | `source` | object | yes | provenance snapshot |
@@ -402,6 +506,9 @@ Creation: a ledger file is created on first audit of a skill instance. It is nev
 Write semantics per field:
 
 - `note`: operator-maintained; never overwritten by automated audit. Automated audit reads it but must not modify it.
+- `tags`: operator-maintained; never overwritten by automated audit.
+- `rule_exceptions`: operator-maintained; never overwritten by automated audit.
+- `sync_protected`: defaults to `true` for `git_clone` sources on first audit; preserved thereafter.
 - `change_log`: append-only. Each audit appends a summary entry. Existing entries are never modified or removed.
 - All other fields: last-write-wins on each audit run.
 

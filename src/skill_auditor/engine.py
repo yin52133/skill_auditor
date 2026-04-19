@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 from .analysis import build_overlap_findings, build_trigger_findings
@@ -48,8 +49,14 @@ def run_audit(
     instances.sort(key=lambda item: (item.skill_key, item.path))
 
     deterministic_findings = []
+    state = StateManager()
     for instance in instances:
-        deterministic_findings.extend(validate_instance(instance))
+        rule_exceptions: list[str] = []
+        ledger_path = state.state_root / "skill_ledger" / f"{instance.instance_id}.json"
+        if ledger_path.exists():
+            ledger = json.loads(ledger_path.read_text(encoding="utf-8"))
+            rule_exceptions = ledger.get("rule_exceptions", [])
+        deterministic_findings.extend(validate_instance(instance, rule_exceptions=rule_exceptions))
     deterministic_findings.sort(key=lambda item: (item.severity, item.rule_id, item.path))
 
     heuristic_findings = []
@@ -71,7 +78,7 @@ def run_audit(
     )
 
     if write_state:
-        StateManager().write(report, audit_mode=audit_mode, active_set_max=active_set_max)
+        state.write(report, audit_mode=audit_mode, active_set_max=active_set_max)
 
     exit_code = 1 if any(finding.severity == "error" for finding in deterministic_findings) else 0
     return report, exit_code

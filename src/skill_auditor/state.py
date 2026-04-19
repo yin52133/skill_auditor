@@ -56,6 +56,9 @@ class StateManager:
             existing = json.loads(ledger_path.read_text(encoding="utf-8"))
 
         note = existing.get("note")
+        tags = existing.get("tags", [])
+        rule_exceptions = existing.get("rule_exceptions", [])
+        sync_protected = existing.get("sync_protected", False)
         change_log = list(existing.get("change_log", []))
         instance_findings = [finding for finding in report.deterministic_findings if finding.instance_id == instance.instance_id]
         error_count = sum(1 for finding in instance_findings if finding.severity == "error")
@@ -90,6 +93,12 @@ class StateManager:
         }
         if note is not None:
             payload["note"] = note
+        payload["tags"] = tags
+        payload["rule_exceptions"] = rule_exceptions
+        if not existing:
+            payload["sync_protected"] = instance.source_kind == "git_clone"
+        else:
+            payload["sync_protected"] = sync_protected
         atomic_write_json(ledger_path, payload)
 
     def _write_index(self, instances: list[SkillInstance]) -> None:
