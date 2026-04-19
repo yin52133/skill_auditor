@@ -195,12 +195,14 @@ skill-auditor audit [path...]
   flag.--all             bool     optional: scan default installed roots for the current host ecosystem
   flag.--format          enum     optional: text/json/markdown
   flag.--ecosystem       enum     optional: host/codex/claude/both
+  flag.--active-set-max  int      optional: override the recommended active-set cap (default: 30)
 
 success → audit report emitted; exit 0 when no deterministic error blocks the requested mode
-error INVALID_ARGUMENT → exit non-zero; malformed flags or incompatible arguments
-error TARGET_NOT_FOUND  → exit non-zero; no matching skill instance under requested target
-error STATE_WRITE_FAILED → exit non-zero; report computed but runtime state write failed
-error ENGINE_BROKEN     → exit non-zero; internal invariant or unexpected fatal exception
+error INVALID_ARGUMENT      → exit non-zero; malformed flags or incompatible arguments
+error TARGET_NOT_FOUND      → exit non-zero; no matching skill instance under requested target
+error STATE_WRITE_FAILED    → exit non-zero; report computed but runtime state write failed
+error ENGINE_BROKEN         → exit non-zero; internal invariant or unexpected fatal exception
+error HOST_ECOSYSTEM_UNKNOWN → exit non-zero; direct CLI invocation with --all and no --ecosystem when host context is not detectable
 ```
 
 Parsing failures inside a target skill are findings, not command-level fatal errors.
@@ -227,7 +229,7 @@ Default target resolution rules:
 - direct CLI invocation outside a wrapper treats `host` as:
   - `codex` when Codex host context is detectable
   - `claude` when Claude host context is detectable
-  - error `HOST_ECOSYSTEM_UNKNOWN` when host context is not detectable and no explicit `--ecosystem` is provided
+  - error `HOST_ECOSYSTEM_UNKNOWN` when host context is not detectable and no explicit `--ecosystem` is provided; the command exits non-zero with a message telling the user to pass `--ecosystem codex`, `--ecosystem claude`, or `--ecosystem both`
 - explicit `--ecosystem both` is the only mode that scans both ecosystems in one run
 
 ### Shared audit design vs ecosystem-specific deltas
@@ -311,6 +313,28 @@ error REPO_NOT_FOUND    → exit non-zero; target path is not a git repository
 error INSTALL_FAILED    → exit non-zero; hook write failed
 ```
 
+### Runtime entry: `skill-auditor watch`
+
+```text
+skill-auditor watch [path...]
+  args.path              path[]   optional: skill dirs or roots to watch; defaults to same resolution as audit --all
+  flag.--ecosystem       enum     optional: host/codex/claude/both
+  flag.--format          enum     optional: text/json/markdown
+
+success → watch loop starts; exits 0 only on clean shutdown (SIGINT or SIGTERM)
+error INVALID_ARGUMENT      → exit non-zero; malformed flags or incompatible arguments
+error TARGET_NOT_FOUND      → exit non-zero; no resolvable watch root
+error HOST_ECOSYSTEM_UNKNOWN → exit non-zero; same condition as audit entry
+```
+
+Watch process lifecycle:
+
+- starts a filesystem watcher on resolved skill roots
+- on SIGINT or SIGTERM: flush any in-progress audit, write final state, exit 0
+- on unhandled fatal exception: write a partial state marker if possible, exit non-zero with ENGINE_BROKEN
+- running multiple watch processes against overlapping roots is allowed; each process operates independently and writes state atomically; no cross-process locking is required for the MVP
+- a PID file or lock file is not required; watch processes do not prevent each other from running
+
 ### Persistent object: Skill instance record
 
 | Field | Type | Required | Notes |
@@ -355,6 +379,23 @@ error INSTALL_FAILED    → exit non-zero; hook write failed
 | `last_audit_summary` | object | yes | summary counts and status |
 | `last_fingerprint` | string | yes | last audited content hash |
 
+### Ledger lifecycle
+
+Creation: a ledger file is created on first audit of a skill instance. It is never created speculatively.
+
+Write semantics per field:
+
+- `note`: operator-maintained; never overwritten by automated audit. Automated audit reads it but must not modify it.
+- `change_log`: append-only. Each audit appends a summary entry. Existing entries are never modified or removed.
+- All other fields: last-write-wins on each audit run.
+
+Prune conditions: a ledger file may only be deleted under one of the following conditions:
+
+- the owning skill instance path no longer exists on disk and the user explicitly runs a future `skill-auditor prune` command (not yet implemented; tracked in checklist)
+- the user explicitly requests removal of a specific instance ledger
+
+No automated audit run may delete or truncate a ledger file. The `skill_index.json`, `clusters.json`, and `active_set.json` derived files may be rebuilt freely, but ledger files are not derived state.
+
 ### Persistent object: Audit run record
 
 | Field | Type | Required | Notes |
@@ -382,7 +423,7 @@ error INSTALL_FAILED    → exit non-zero; hook write failed
 
 `docs/spec/update_history` is an append-only canonical revision log file inside the spec package.
 
-The implementation may serialize it as JSON, JSON Lines, or Markdown with machine-readable frontmatter. The required contract is the record content, not the encoding.
+The canonical serialization format is **JSON Lines**: each record is one self-contained JSON object on its own line. This format allows atomic line-append without rewriting the file, and each line is independently parseable. Do not use JSON array format or Markdown. Existing entries must never be modified or removed.
 
 | Field | Type | Required | Notes |
 |-------|------|----------|-------|
