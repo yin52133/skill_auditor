@@ -164,3 +164,45 @@ def test_would_duplicate_false_for_different_family():
     ]
     redundancy_candidates = build_redundancy_candidates(instances)
     assert _would_duplicate_redundant_family(instances[1], {"pdf"}, redundancy_candidates) is False
+
+
+# --- _active_reasons ---
+
+def test_active_reasons_scarce_category():
+    reasons = _active_reasons(
+        category_label="documents",
+        repo_category_count=2,
+        warning_count=0,
+        heuristic_count=0,
+        redundancy_penalty=0,
+    )
+    assert "category is relatively scarce" in reasons
+    assert "no deterministic warnings" in reasons
+    assert "no heuristic debt" in reasons
+    assert "not currently in a redundant family" in reasons
+
+
+def test_active_reasons_saturated():
+    reasons = _active_reasons(
+        category_label="documents",
+        repo_category_count=15,
+        warning_count=2,
+        heuristic_count=1,
+        redundancy_penalty=1,
+    )
+    assert "selected despite a saturated category" in reasons
+    assert "category is relatively scarce" not in reasons
+    assert "no deterministic warnings" not in reasons
+
+
+# --- _active_score edge cases ---
+
+def test_active_score_penalizes_warnings():
+    clean = _active_score(repo_category_count=1, warning_count=0, heuristic_count=0, redundancy_penalty=0)
+    warned = _active_score(repo_category_count=1, warning_count=3, heuristic_count=0, redundancy_penalty=0)
+    assert warned < clean
+
+
+def test_active_score_floors_at_zero():
+    score = _active_score(repo_category_count=1, warning_count=50, heuristic_count=50, redundancy_penalty=50)
+    assert score == 0
