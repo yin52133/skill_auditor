@@ -160,3 +160,62 @@ def test_remediation_section_shows_contextual_what_and_how():
     assert "/skills/dangerous-skill/SKILL.md" in markdown
     assert "L12" in markdown
     assert "curl" in markdown
+
+
+def test_markdown_zh_translation_sections():
+    instances = [make_instance("a1", "good-skill", "/skills/good-skill")]
+    report = AuditReport(
+        run_id="run-zh",
+        status="completed",
+        target_scope={"paths": ["/skills"], "all": False, "ecosystem": "codex"},
+        instances=instances,
+        deterministic_findings=[],
+        heuristic_findings=[],
+        semantic_status="skipped",
+        started_at="2026-04-20T00:00:00+00:00",
+        finished_at="2026-04-20T00:01:00+00:00",
+    )
+    markdown = render_markdown(report, language="zh")
+    assert "审计报告" in markdown
+    assert "总体摘要" in markdown
+    assert "严重级别摘要" in markdown
+    assert "治理动作" in markdown
+    assert "Active Set 推荐" in markdown
+
+
+def test_markdown_false_positive_detection():
+    instances = [make_instance("a1", "test-skill", "/skills/test-skill")]
+    findings = [
+        make_finding("a1", "/skills/test-skill/SKILL.md", "codex.openai_yaml.stale_display_name", "warn",
+                      "stale display name", category="lifecycle"),
+    ]
+    report = AuditReport(
+        run_id="run-fp",
+        status="completed",
+        target_scope={"paths": ["/skills"], "all": False, "ecosystem": "codex"},
+        instances=instances,
+        deterministic_findings=findings,
+        heuristic_findings=[],
+        semantic_status="skipped",
+        started_at="2026-04-20T00:00:00+00:00",
+        finished_at="2026-04-20T00:01:00+00:00",
+    )
+    markdown = render_markdown(report)
+    assert "false-positive candidate" in markdown.lower()
+
+
+def test_markdown_empty_report_no_errors():
+    report = AuditReport(
+        run_id="run-empty",
+        status="completed",
+        target_scope={"paths": [], "all": True, "ecosystem": "codex"},
+        instances=[],
+        deterministic_findings=[],
+        heuristic_findings=[],
+        semantic_status="skipped",
+        started_at="2026-04-20T00:00:00+00:00",
+        finished_at="2026-04-20T00:01:00+00:00",
+    )
+    markdown = render_markdown(report)
+    assert "## Executive Summary" in markdown
+    assert "Scanned `0`" in markdown
