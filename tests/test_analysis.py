@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from skill_auditor.analysis import (
     build_category_assignments,
+    build_compliance_summary,
+    build_merge_suggestions,
     build_redundancy_candidates,
     build_remediation_suggestions,
     build_trigger_findings,
@@ -115,3 +117,57 @@ def test_remediation_what_and_how_are_not_identical():
     s = suggestions[0]
     assert s["what"] != s["how"]
     assert "700" in s["how"]
+
+
+def test_merge_suggestions_detect_same_format_pair():
+    instances = [
+        make_instance("a1", "pdf", "Use this skill to create, read, merge PDF files."),
+        make_instance("b2", "minimax-pdf", "Professional PDF creation with design tokens and templates."),
+    ]
+    suggestions = build_merge_suggestions(instances, [], [])
+    assert len(suggestions) == 1
+    s = suggestions[0]
+    assert s["merge_type"] == "true_duplicate"
+    assert set(s["merge_group"]) == {"pdf", "minimax-pdf"}
+
+
+def test_merge_suggestions_family_consolidate():
+    instances = [
+        make_instance("a1", "pptx", "Create and edit pptx presentations."),
+        make_instance("b2", "pptx-generator", "Generate pptx slide decks from outlines."),
+        make_instance("c3", "slide-making-skill", "Build pptx presentations with templates."),
+    ]
+    suggestions = build_merge_suggestions(instances, [], [])
+    family = [s for s in suggestions if s["merge_type"] == "family_consolidate"]
+    assert len(family) == 1
+    assert len(family[0]["merge_group"]) == 3
+
+
+def test_merge_suggestions_pair_extracted_from_large_group():
+    instances = [
+        make_instance("a1", "pdf", "Create and merge PDF files."),
+        make_instance("b2", "minimax-pdf", "Professional PDF design and creation."),
+        make_instance("c3", "docx", "Create docx and export to pdf format."),
+    ]
+    suggestions = build_merge_suggestions(instances, [], [])
+    pairs = [s for s in suggestions if s["merge_type"] == "true_duplicate"]
+    assert any(set(p["merge_group"]) == {"pdf", "minimax-pdf"} for p in pairs)
+
+
+def test_description_too_short_triggers_heuristic():
+    instances = [make_instance("a1", "tiny-skill", "Short desc.")]
+    findings = build_trigger_findings(instances)
+    assert any(f.rule_id == "heuristic.header.description_too_short" for f in findings)
+
+
+def test_compliance_summary_counts_missing_license():
+    instances = [
+        make_instance("a1", "good-skill", "A well-described skill for testing."),
+        make_instance("b2", "bad-skill", "Another well-described skill for testing."),
+    ]
+    det_findings = [
+        _make_finding("b2", "schema.frontmatter.missing_license", "warn"),
+    ]
+    summary = build_compliance_summary(instances, det_findings, [])
+    assert summary["missing_license"] == 1
+    assert summary["total"] == 2

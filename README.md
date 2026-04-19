@@ -8,6 +8,8 @@ Current repository state:
 - implementation tracking lives in [`docs/spec/checklist.json`](./docs/spec/checklist.json)
 - design revision history lives in [`docs/spec/update_history`](./docs/spec/update_history)
 - upstream reference analysis lives in [`docs/spec/references.md`](./docs/spec/references.md)
+- Python implementation lives in [`src/skill_auditor/`](./src/skill_auditor/)
+- test coverage lives in [`tests/`](./tests/)
 
 ## Goal
 
@@ -28,7 +30,7 @@ The design explicitly separates:
 
 ## Current Status
 
-This repository is in spec-first stage.
+This repository is in implementation stage.
 
 Included now:
 
@@ -36,14 +38,17 @@ Included now:
 - reference analysis against the OpenAI Codex and Anthropic skill-creator examples
 - initial execution checklist
 - initial update history entry
+- Python package and CLI entry points
+- deterministic audit pipeline for Codex and Claude-targeted skill folders
+- runtime state writes for audit runs, ledgers, index, clusters, and active set
+- watch-session primitives plus hook installer and hook-run support
+- pytest coverage for discovery, security, state, overlap, watch, and hook flows
 
 Not included yet:
 
-- Python implementation
-- CLI commands
-- watch mode
-- git hooks
-- clustering engine
+- remote provenance sync
+- explicit prune flow for stale ledgers
+- richer semantic analysis beyond host-native skipped mode
 
 ## Repository Files
 
@@ -53,6 +58,8 @@ Not included yet:
 | `docs/spec/checklist.json` | implementation tracker for this repo |
 | `docs/spec/update_history` | append-only design revision log |
 | `docs/spec/references.md` | committed reference analysis |
+| `src/skill_auditor/` | Python implementation and CLI |
+| `tests/` | verification coverage |
 | `skills/` | future Codex and Claude wrapper skills |
 | `hooks/` | future hook templates and install helpers |
 | `.gitignore` | local repo ignore rules, including cloned references |

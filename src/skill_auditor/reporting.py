@@ -8,7 +8,9 @@ from .analysis import (
     STRUCTURED_CATEGORY_LABELS,
     build_active_set,
     build_category_summary,
+    build_compliance_summary,
     build_governance_actions,
+    build_merge_suggestions,
     build_priority_actions,
     build_redundancy_candidates,
     build_remediation_suggestions,
@@ -75,6 +77,19 @@ TRANSLATIONS = {
         "why": "Why",
         "which": "Which",
         "how": "How",
+        "compliance_summary": "Frontmatter Compliance Summary",
+        "compliance_rate": "Compliance rate",
+        "missing_name": "Missing `name`",
+        "missing_description": "Missing `description`",
+        "missing_license": "Missing `license` (Codex only)",
+        "description_too_short": "Description too short (<20 chars)",
+        "merge_suggestions": "Merge Suggestions",
+        "no_merge_suggestions": "No merge suggestions were generated.",
+        "merge_true_duplicate": "true duplicate",
+        "merge_boundary_clarify": "boundary clarify",
+        "merge_family_consolidate": "family consolidate",
+        "shared_keywords": "Shared keywords",
+        "overlap_score": "Overlap score",
     },
     "zh": {
         "title": "skill-auditor 审计报告",
@@ -132,6 +147,19 @@ TRANSLATIONS = {
         "why": "为什么",
         "which": "涉及哪些",
         "how": "怎么做",
+        "compliance_summary": "Frontmatter 合规摘要",
+        "compliance_rate": "合规率",
+        "missing_name": "缺少 `name`",
+        "missing_description": "缺少 `description`",
+        "missing_license": "缺少 `license`（仅 Codex）",
+        "description_too_short": "描述过短（<20 字符）",
+        "merge_suggestions": "合并建议",
+        "no_merge_suggestions": "没有生成合并建议。",
+        "merge_true_duplicate": "真重复",
+        "merge_boundary_clarify": "边界模糊",
+        "merge_family_consolidate": "家族合并",
+        "shared_keywords": "共享关键字",
+        "overlap_score": "重叠度",
     },
 }
 
@@ -218,6 +246,14 @@ def render_markdown(report: AuditReport, *, language: str = "en") -> str:
         f"- `{t['status_review']}`: `{summary['validity']['counts']['review']}`",
         f"- `{t['status_invalid']}`: `{summary['validity']['counts']['invalid']}`",
         "",
+        f"## {t['compliance_summary']}",
+        f"- {t['compliance_rate']}: `{summary['compliance']['compliant']}/{summary['compliance']['total']}`"
+        f"（{round(summary['compliance']['compliant'] / max(summary['compliance']['total'], 1) * 100)}%）",
+        f"- {t['missing_name']}: `{summary['compliance']['missing_name']}`",
+        f"- {t['missing_description']}: `{summary['compliance']['missing_description']}`",
+        f"- {t['missing_license']}: `{summary['compliance']['missing_license']}`",
+        f"- {t['description_too_short']}: `{summary['compliance']['description_too_short']}`",
+        "",
         f"## {t['severity_summary']}",
         f"- `error`: `{severity_counts.get('error', 0)}`",
         f"- `warn`: `{severity_counts.get('warn', 0)}`",
@@ -273,6 +309,23 @@ def render_markdown(report: AuditReport, *, language: str = "en") -> str:
             lines.append(f"- `{finding.rule_id}`: {finding.evidence}")
     else:
         lines.append(f"- {t['no_conflicts']}")
+
+    lines.extend(["", f"## {t['merge_suggestions']}"])
+    if summary["merge_suggestions"]:
+        for ms in summary["merge_suggestions"]:
+            merge_type_label = t[f"merge_{ms['merge_type']}"]
+            group_str = " + ".join(f"`{s}`" for s in ms["merge_group"])
+            cat = ms["category"]
+            if language == "zh":
+                cat = _translate_category(STRUCTURED_CATEGORY_LABELS.get(cat, cat))
+            keywords_str = ", ".join(ms["shared_keywords"])
+            lines.append(f"- [{merge_type_label}] {group_str} [{cat}]")
+            lines.append(f"  {t['shared_keywords']}: {keywords_str}")
+            lines.append(f"  {t['overlap_score']}: `{ms['overlap_score']}`")
+            suggestion = ms["suggestion_zh"] if language == "zh" and "suggestion_zh" in ms else ms["suggestion"]
+            lines.append(f"  {t['suggestion']}: {suggestion}")
+    else:
+        lines.append(f"- {t['no_merge_suggestions']}")
 
     lines.extend(["", f"## {t['most_impacted_skills']}"])
     if top_impacted:
@@ -412,14 +465,18 @@ def build_report_summary(report: AuditReport) -> dict[str, object]:
         report.deterministic_findings,
         report.heuristic_findings,
     )
+    compliance = build_compliance_summary(report.instances, report.deterministic_findings, report.heuristic_findings)
+    merge_suggestions = build_merge_suggestions(report.instances, report.deterministic_findings, report.heuristic_findings)
     return {
         "validity": validity,
+        "compliance": compliance,
         "categories": categories,
         "trigger_quality": trigger_quality,
         "redundancy_candidates": redundancy_candidates,
         "governance_actions": governance_actions,
         "priority_actions": priority_actions,
         "remediation_suggestions": remediation_suggestions,
+        "merge_suggestions": merge_suggestions,
     }
 
 
@@ -630,6 +687,10 @@ def _remediation_why_zh(rule_id: str, status: str) -> str:
             "私钥一旦泄露无法撤销，所有依赖该密钥的认证体系都会被攻破",
         "structure.skill_md.too_long":
             "过长的 SKILL.md 会占满 LLM 上下文窗口，挤掉用户实际任务内容，导致 skill 指令被截断或忽略",
+        "schema.frontmatter.missing_license":
+            "缺少 license 声明会导致使用者不清楚该 skill 的分发许可条件，影响合规审计",
+        "heuristic.header.description_too_short":
+            "过短的 description 无法为路由器提供足够信息，路由器可能跳过该 skill 或随机选择",
         "schema.frontmatter.unexpected_key":
             "非标准 frontmatter 字段会被不同生态解析器静默忽略或报错，影响跨平台兼容性",
         "schema.frontmatter.missing_name":
@@ -658,6 +719,10 @@ def _remediation_why_en(rule_id: str, status: str) -> str:
             "A leaked private key cannot be revoked without rotating every system that trusts it",
         "structure.skill_md.too_long":
             "An oversized SKILL.md crowds out user task content in the LLM context window, causing instructions to be truncated or ignored",
+        "schema.frontmatter.missing_license":
+            "Without a license declaration, users cannot determine the distribution terms, creating compliance risk",
+        "heuristic.header.description_too_short":
+            "A very short description gives the router no signal for routing decisions, causing under-trigger or random selection",
         "schema.frontmatter.unexpected_key":
             "Non-standard frontmatter keys are silently dropped or error out across ecosystems, hurting portability",
     }

@@ -265,6 +265,24 @@ def build_trigger_findings(instances: list[SkillInstance]) -> list[Finding]:
             )
             continue
 
+        if len(description) < 20:
+            findings.append(
+                Finding(
+                    rule_id="heuristic.header.description_too_short",
+                    category="trigger",
+                    severity="warn",
+                    confidence=0.85,
+                    ecosystem=instance.ecosystem,
+                    instance_id=instance.instance_id,
+                    path=instance.path,
+                    evidence=(
+                        f"{instance.skill_key} description is only {len(description)} characters; "
+                        "too short for the router to determine when to trigger."
+                    ),
+                    suggested_fix="Expand the description to at least 20 characters with clear trigger conditions.",
+                )
+            )
+
         has_trigger_cue = any(pattern in lowered for pattern in TRIGGER_CUE_PATTERNS)
         starts_generic = lowered.startswith(GENERIC_TRIGGER_OPENERS)
         action_count = len(tokenize(description) & ACTION_VERBS)
@@ -347,6 +365,160 @@ def build_redundancy_candidates(instances: list[SkillInstance]) -> list[dict[str
     return sorted(candidates, key=lambda item: (-item["similarity"], item["skill_keys"]))
 
 
+FORMAT_KEYWORDS = {"pdf", "docx", "pptx", "xlsx", "gif", "csv", "svg"}
+
+_MERGE_SUGGESTION_ZH = {
+    "true_duplicate": "建议合并为统一 skill，通过模式参数区分不同实现；合并后统一触发描述，删除冗余的 skill。",
+    "boundary_clarify": "建议明确触发边界 — 在各自 description 中加入 'Do NOT use when...' 互斥条件，避免路由冲突。",
+    "family_consolidate": "建议合并为一个标准 skill，将子功能作为工作流模式；保留功能差异最大的 1-2 个作为独立 skill。",
+}
+
+_MERGE_SUGGESTION_EN = {
+    "true_duplicate": "Merge into a unified skill with mode parameters for different implementations; consolidate trigger descriptions.",
+    "boundary_clarify": "Clarify trigger boundaries — add 'Do NOT use when...' exclusions to each description to avoid routing conflicts.",
+    "family_consolidate": "Consolidate into one canonical skill with sub-workflows; keep only the 1-2 most differentiated as separate skills.",
+}
+
+
+def build_merge_suggestions(
+    instances: list[SkillInstance],
+    deterministic_findings: list[Finding],
+    heuristic_findings: list[Finding],
+) -> list[dict[str, object]]:
+    assignments = build_category_assignments(instances)
+    suggestions: list[dict[str, object]] = []
+
+    format_groups: dict[str, list[SkillInstance]] = defaultdict(list)
+    for instance in instances:
+        text = " ".join(filter(None, [instance.skill_key, instance.description])).lower()
+        for fmt in FORMAT_KEYWORDS:
+            if fmt in text:
+                format_groups[fmt].append(instance)
+
+    seen_pairs: set[tuple[str, ...]] = set()
+
+    for fmt, group in sorted(format_groups.items(), key=lambda item: (-len(item[1]), item[0])):
+        if len(group) < 2:
+            continue
+        group = sorted(group, key=lambda i: i.skill_key)
+
+        if len(group) >= 3:
+            # Emit pairwise true_duplicate for members whose skill_keys both contain the format keyword
+            key_members = [i for i in group if fmt in i.skill_key.lower()]
+            for left, right in combinations(sorted(key_members, key=lambda i: i.skill_key), 2):
+                pair_key = (left.skill_key, right.skill_key)
+                if pair_key in seen_pairs:
+                    continue
+                left_cat = assignments[left.instance_id]["primary_category"]
+                right_cat = assignments[right.instance_id]["primary_category"]
+                if left_cat != right_cat:
+                    continue
+                seen_pairs.add(pair_key)
+                left_tokens = tokenize(" ".join(filter(None, [left.skill_key, left.description])))
+                right_tokens = tokenize(" ".join(filter(None, [right.skill_key, right.description])))
+                union = left_tokens | right_tokens
+                similarity = round(len(left_tokens & right_tokens) / len(union), 2) if union else 0.0
+                suggestions.append({
+                    "merge_group": [left.skill_key, right.skill_key],
+                    "category": left_cat,
+                    "shared_keywords": sorted((left_tokens & right_tokens) - {
+                        "the", "a", "an", "and", "or", "for", "to", "in", "of", "is", "it", "this", "that",
+                        "with", "use", "when", "skill", "skills", "can", "be", "also", "using", "your", "you",
+                    }),
+                    "overlap_score": similarity,
+                    "merge_type": "true_duplicate",
+                    "suggestion": _MERGE_SUGGESTION_EN["true_duplicate"],
+                    "suggestion_zh": _MERGE_SUGGESTION_ZH["true_duplicate"],
+                })
+
+            # Emit family_consolidate only if 3+ members have the format keyword in their skill_key
+            family_members = key_members if len(key_members) >= 3 else group
+            group_keys = tuple(i.skill_key for i in sorted(family_members, key=lambda i: i.skill_key))
+            if len(group_keys) >= 3 and group_keys not in seen_pairs:
+                seen_pairs.add(group_keys)
+                shared_kw = _shared_keywords(list(family_members))
+                suggestions.append({
+                    "merge_group": list(group_keys),
+                    "category": assignments[sorted(family_members, key=lambda i: i.skill_key)[0].instance_id]["primary_category"],
+                    "shared_keywords": shared_kw,
+                    "overlap_score": 0.0,
+                    "merge_type": "family_consolidate",
+                    "suggestion": _MERGE_SUGGESTION_EN["family_consolidate"],
+                    "suggestion_zh": _MERGE_SUGGESTION_ZH["family_consolidate"],
+                })
+            continue
+
+        for left, right in combinations(group, 2):
+            pair_key = (left.skill_key, right.skill_key)
+            if pair_key in seen_pairs:
+                continue
+            seen_pairs.add(pair_key)
+
+            left_cat = assignments[left.instance_id]["primary_category"]
+            right_cat = assignments[right.instance_id]["primary_category"]
+            if left_cat != right_cat:
+                continue
+
+            left_tokens = tokenize(" ".join(filter(None, [left.skill_key, left.description])))
+            right_tokens = tokenize(" ".join(filter(None, [right.skill_key, right.description])))
+            union = left_tokens | right_tokens
+            similarity = len(left_tokens & right_tokens) / len(union) if union else 0.0
+
+            shared_verbs = (left_tokens & right_tokens) & ACTION_VERBS
+
+            # Both skill_keys contain the same format keyword — always a true_duplicate candidate
+            left_key_lower = left.skill_key.lower()
+            right_key_lower = right.skill_key.lower()
+            both_keys_have_format = any(f in left_key_lower and f in right_key_lower for f in FORMAT_KEYWORDS)
+
+            if both_keys_have_format or similarity > 0.35:
+                merge_type = "true_duplicate"
+            elif similarity >= 0.20 and len(shared_verbs) >= 2:
+                merge_type = "boundary_clarify"
+            else:
+                continue
+
+            suggestions.append({
+                "merge_group": [left.skill_key, right.skill_key],
+                "category": left_cat,
+                "shared_keywords": sorted((left_tokens & right_tokens) - {
+                    "the", "a", "an", "and", "or", "for", "to", "in", "of", "is", "it", "this", "that",
+                    "with", "use", "when", "skill", "skills", "can", "be", "also", "using", "your", "you",
+                }),
+                "overlap_score": round(similarity, 2),
+                "merge_type": merge_type,
+                "suggestion": _MERGE_SUGGESTION_EN[merge_type],
+                "suggestion_zh": _MERGE_SUGGESTION_ZH[merge_type],
+            })
+
+    suggestions.sort(key=lambda item: (
+        {"true_duplicate": 0, "family_consolidate": 1, "boundary_clarify": 2}.get(item["merge_type"], 3),
+        -item["overlap_score"],
+    ))
+
+    # Filter out family groups where shared keywords are all generic — keep only FORMAT_KEYWORD groups
+    def _has_real_shared_keyword(s: dict) -> bool:
+        shared = set(s.get("shared_keywords", []))
+        return bool(shared & FORMAT_KEYWORDS) or s.get("merge_type") != "family_consolidate"
+
+    suggestions = [s for s in suggestions if _has_real_shared_keyword(s)]
+    return suggestions[:15]
+
+
+def _shared_keywords(instances: list[SkillInstance]) -> list[str]:
+    stop = {
+        "the", "a", "an", "and", "or", "for", "to", "in", "of", "is", "it", "this", "that", "with",
+        "use", "when", "skill", "skills", "can", "be", "also", "using", "your", "you",
+    }
+    token_sets = [tokenize(" ".join(filter(None, [i.skill_key, i.description]))) for i in instances]
+    if not token_sets:
+        return []
+    common = token_sets[0]
+    for ts in token_sets[1:]:
+        common = common & ts
+    return sorted(common - stop)
+
+
 def build_validity_summary(
     instances: list[SkillInstance],
     deterministic_findings: list[Finding],
@@ -386,6 +558,36 @@ def build_validity_summary(
             "invalid": counts["invalid"],
         },
         "skills": sorted(skill_states, key=lambda item: (item["status"], item["skill_key"])),
+    }
+
+
+def build_compliance_summary(
+    instances: list[SkillInstance],
+    deterministic_findings: list[Finding],
+    heuristic_findings: list[Finding],
+) -> dict[str, object]:
+    all_findings = deterministic_findings + heuristic_findings
+    missing_name = sum(1 for f in all_findings if f.rule_id == "schema.frontmatter.missing_name")
+    missing_description = sum(1 for f in all_findings if f.rule_id == "schema.frontmatter.missing_description")
+    missing_license = sum(1 for f in all_findings if f.rule_id == "schema.frontmatter.missing_license")
+    description_too_short = sum(1 for f in all_findings if f.rule_id == "heuristic.header.description_too_short")
+    total_issues = missing_name + missing_description + missing_license + description_too_short
+    compliant = len(instances) - len({
+        f.instance_id for f in all_findings
+        if f.rule_id in {
+            "schema.frontmatter.missing_name",
+            "schema.frontmatter.missing_description",
+            "schema.frontmatter.missing_license",
+            "heuristic.header.description_too_short",
+        }
+    })
+    return {
+        "total": len(instances),
+        "compliant": compliant,
+        "missing_name": missing_name,
+        "missing_description": missing_description,
+        "missing_license": missing_license,
+        "description_too_short": description_too_short,
     }
 
 
@@ -830,6 +1032,27 @@ def _remediation_text(instance: SkillInstance, finding: Finding) -> dict[str, st
                 "拆分方案：(1) 将参考文档、示例、详细 API 说明移到 `references/` 目录；"
                 "(2) SKILL.md 只保留触发条件、核心工作流、关键决策点；"
                 "(3) 用相对链接指向 references/ 内容。"
+            ),
+        }
+
+    if finding.rule_id == "schema.frontmatter.missing_license":
+        return {
+            "what": "补充 license 声明",
+            "how": (
+                f"在 {path} frontmatter 中添加 `license:` 字段。"
+                "Anthropic 官方 skill 使用 `license: Complete terms in LICENSE.txt`，"
+                "第三方 skill 通常使用 `license: MIT` 或 `license: Proprietary`。"
+            ),
+        }
+
+    if finding.rule_id == "heuristic.header.description_too_short":
+        return {
+            "what": "扩充过短的 description",
+            "how": (
+                f"{path} 的 description 仅 {finding.evidence.split()[4]} 字符，"
+                "路由器无法据此判断何时触发。"
+                "扩充要点：(1) 至少 20 字符；(2) 包含 'Use when...' 触发场景；"
+                "(3) 列出 2-3 个典型用户请求关键词。"
             ),
         }
 

@@ -213,6 +213,18 @@ def validate_frontmatter(instance: SkillInstance, parsed_skill: ParsedSkill) -> 
                 )
             )
 
+    if instance.ecosystem == "codex" and metadata.get("license") is None:
+        findings.append(
+            make_finding(
+                instance,
+                rule_id="schema.frontmatter.missing_license",
+                category="schema",
+                severity="warn",
+                path=skill_md,
+                evidence="Codex skill is missing 'license' field. Anthropic official skills require license declaration.",
+            )
+        )
+
     line_count = parsed_skill.raw_content.count("\n") + 1
     if line_count > 500:
         findings.append(
