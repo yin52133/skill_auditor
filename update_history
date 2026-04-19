@@ -1,0 +1,18 @@
+[
+  {
+    "version": "0.1.0",
+    "date": "2026-04-19",
+    "summary": "Create first complete skill-auditor design spec and repository control files.",
+    "rationale": "The project starts in spec-first mode. The canonical design, implementation tracker, revision log, reference analysis, and README must exist before implementation begins.",
+    "spec_refs": [
+      "Problem and Goal",
+      "Scope and Non-Goals",
+      "Core Decisions",
+      "Data and Interface Contracts",
+      "Implementation Phases or Rollout Steps"
+    ],
+    "checklist_ids": [
+      "repo-controls"
+    ]
+  }
+]

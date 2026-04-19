@@ -1,0 +1,60 @@
+[
+  {
+    "id": "repo-controls",
+    "title": "Stabilize canonical repo control files",
+    "status": "done",
+    "spec_refs": [
+      "Problem and Goal",
+      "Data and Interface Contracts",
+      "Implementation Phases or Rollout Steps"
+    ],
+    "notes": "SPEC.md, checklist.json, update_history, and README.md aligned for first version."
+  },
+  {
+    "id": "discovery-and-parse",
+    "title": "Implement discovery and deterministic parsing",
+    "status": "pending",
+    "spec_refs": [
+      "System Boundaries",
+      "Runtime Flows",
+      "Data and Interface Contracts",
+      "Implementation Phases or Rollout Steps"
+    ],
+    "notes": "Scan Codex and Claude skill roots, detect ecosystems, and parse SKILL.md plus companion files."
+  },
+  {
+    "id": "state-and-reporting",
+    "title": "Implement runtime state writes and report generation",
+    "status": "pending",
+    "spec_refs": [
+      "Ownership or Source of Truth",
+      "Data and Interface Contracts",
+      "Failure Cases and Acceptance",
+      "Implementation Phases or Rollout Steps"
+    ],
+    "notes": "Write audit run snapshots, ledgers, global index, and text/json/markdown reports."
+  },
+  {
+    "id": "watch-and-hooks",
+    "title": "Implement watch mode and git hook gate",
+    "status": "pending",
+    "spec_refs": [
+      "Runtime Flows",
+      "Failure Cases and Acceptance",
+      "Implementation Phases or Rollout Steps"
+    ],
+    "notes": "Debounced watch-based auditing and deterministic git-hook blocking."
+  },
+  {
+    "id": "overlap-and-active-set",
+    "title": "Implement clustering, heuristic analysis, and active-set recommendation",
+    "status": "pending",
+    "spec_refs": [
+      "Core Decisions",
+      "Data and Interface Contracts",
+      "Failure Cases and Acceptance",
+      "Implementation Phases or Rollout Steps"
+    ],
+    "notes": "Keep deterministic and heuristic findings separate and cap recommendations at configured max."
+  }
+]
