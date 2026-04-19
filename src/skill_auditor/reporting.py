@@ -254,8 +254,13 @@ def render_markdown(report: AuditReport, *, language: str = "en") -> str:
     if summary["redundancy_candidates"]:
         for candidate in summary["redundancy_candidates"][:10]:
             left, right = candidate["skill_keys"]
+            reason = _zh_redundancy_reason(candidate["reason"]) if language == "zh" else candidate["reason"]
+            cat = _translate_category(STRUCTURED_CATEGORY_LABELS.get(candidate["category"], candidate["category"])) if language == "zh" else candidate["category"]
             lines.append(
-                f"- `{left}` vs `{right}` in `{candidate['category']}` "
+                f"- `{left}` vs `{right}` [{cat}] "
+                f"(相似度 `{candidate['similarity']}`): {reason}"
+                if language == "zh"
+                else f"- `{left}` vs `{right}` in `{candidate['category']}` "
                 f"(similarity `{candidate['similarity']}`): {candidate['reason']}"
             )
     else:
@@ -300,25 +305,41 @@ def render_markdown(report: AuditReport, *, language: str = "en") -> str:
     if summary["governance_actions"]:
         for action in summary["governance_actions"]:
             priority = t[f"priority_{action['priority']}"]
-            suffix = f" {'Skills' if language == 'en' else '涉及'}: {', '.join(action['skill_keys'])}." if action["skill_keys"] else ""
-            lines.append(f"- `{priority}` `{action['type']}`: {action['title']}. {action['details']}{suffix}")
+            suffix = f" 涉及: {', '.join(action['skill_keys'])}." if action["skill_keys"] else ""
+            if language == "zh":
+                zh_title, zh_details = _zh_governance_action(action)
+                lines.append(f"- `{priority}` `{action['type']}`: {zh_title}。{zh_details}{suffix}")
+            else:
+                suffix_en = f" Skills: {', '.join(action['skill_keys'])}." if action["skill_keys"] else ""
+                lines.append(f"- `{priority}` `{action['type']}`: {action['title']}. {action['details']}{suffix_en}")
     else:
         lines.append(f"- {t['no_governance_actions']}")
 
     lines.extend(["", f"## {t['priority_actions']}"])
     for action in summary["priority_actions"]:
         which = ", ".join(action["which"]) if action["which"] else "-"
-        lines.append(f"- `{action['priority']}` {t['what']}: {action['what']}")
-        lines.append(f"  {t['why']}: {action['why']}")
-        lines.append(f"  {t['which']}: {which}")
-        lines.append(f"  {t['how']}: {action['how']}")
+        if language == "zh":
+            what_zh = _PRIORITY_WHAT_ZH.get(action["what"], action["what"])
+            why_zh = _PRIORITY_WHY_ZH.get(action["why"], action["why"])
+            how_zh = _PRIORITY_HOW_ZH.get(action["how"], action["how"])
+            lines.append(f"- `{action['priority']}` {t['what']}: {what_zh}")
+            lines.append(f"  {t['why']}: {why_zh}")
+            lines.append(f"  {t['which']}: {which}")
+            lines.append(f"  {t['how']}: {how_zh}")
+        else:
+            lines.append(f"- `{action['priority']}` {t['what']}: {action['what']}")
+            lines.append(f"  {t['why']}: {action['why']}")
+            lines.append(f"  {t['which']}: {which}")
+            lines.append(f"  {t['how']}: {action['how']}")
 
     lines.extend(["", f"## {t['active_set_recommendation']}"])
     for entry in active_set["recommended_active"]:
-        reasons = "; ".join(entry["reasons"])
         category = entry["category"]
         if language == "zh":
             category = _translate_category(category)
+            reasons = "；".join(_zh_active_reason(r) for r in entry["reasons"])
+        else:
+            reasons = "; ".join(entry["reasons"])
         lines.append(
             f"- `{entry['skill_key']}` [{category}] {t['score']}={entry['score']} "
             f"{t['warnings']}={entry['warning_count']} {t['heuristics']}={entry['heuristic_count']} "
@@ -479,6 +500,113 @@ def _translate_category(label: str) -> str:
         "General / uncategorized": "通用 / 未归类",
     }
     return mapping.get(label, label)
+
+
+# ---------------------------------------------------------------------------
+# Chinese translation helpers for analysis-layer prose (fixed English strings)
+# ---------------------------------------------------------------------------
+
+_GOVERNANCE_TITLES_ZH = {
+    "Repair invalid skills before expanding active use": "在扩大使用前先修复无效 skill",
+    "Review redundant or family-overlapping skills": "复核重复或同家族 skill 的触发边界",
+    "Tighten trigger descriptions with weak activation cues": "收紧触发描述，补充明确激活条件",
+    "Review saturated categories for active-set trimming": "复核饱和分类，裁减 active-set",
+}
+
+_PRIORITY_WHAT_ZH = {
+    "Remove unsafe execution patterns from installed skills":
+        "从已安装的 skill 中移除不安全执行模式",
+    "Trim redundant family skills before they compete for the same trigger surface":
+        "在同家族 skill 产生触发竞争前裁减冗余成员",
+    "Rewrite weak trigger descriptions into explicit activation rules":
+        "将模糊触发描述改写为明确激活规则",
+    "Batch UI metadata polish and oversized SKILL.md cleanup separately from blocking work":
+        "将 UI 元数据清理和超长 SKILL.md 拆分单独排期，不与阻断项混排",
+}
+
+_PRIORITY_WHY_ZH = {
+    "These are real blocking findings that still deserve hard attention even after metadata debt was downgraded.":
+        "这些是真实的阻断性发现，即使元数据 debt 已降级，也必须优先处理。",
+    "Redundant design-family skills create trigger noise and make active-set curation harder.":
+        "同家族冗余 skill 会制造触发噪音，让 active-set 管理越来越难。",
+    "Descriptions without clear `use when` cues are hard to route correctly and often cause under-trigger or over-trigger behavior.":
+        "没有明确 `use when` 提示的描述难以正确路由，容易导致漏触或乱触发。",
+    "These items hurt maintainability and presentation, but they are mostly review-only debt and should not outrank true security or trigger issues.":
+        "这些问题影响可维护性和展示质量，但属于 review debt，优先级低于真实安全和触发问题。",
+}
+
+_PRIORITY_HOW_ZH = {
+    "Inspect each flagged script, replace temp/download execution or pipe-to-shell flows with committed reviewable scripts, then rerun `skill-auditor audit` to confirm the error is gone.":
+        "逐一检查被标记的脚本，将 temp/下载目录执行或 pipe-to-shell 流程替换为已提交、可 review 的脚本，再运行 `skill-auditor audit` 确认 error 消失。",
+    "Review the pair side-by-side, decide whether one should be canonical, whether one should narrow its trigger wording, or whether both should stay but with explicit family boundaries.":
+        "并排对比这对 skill，决定：是否以其中一个为标准版、是否收窄触发描述、或者两者保留但划定明确的家族边界。",
+    "For each skill, rewrite the frontmatter description to explicitly state when it should trigger, when it should not trigger, and which neighboring skills it should defer to.":
+        "逐一重写 frontmatter description，明确说明：何时触发、何时不触发、与哪些相邻 skill 的边界在哪里。",
+    "Split bulky SKILL.md files into references/, and only fix openai.yaml fields for skills that truly need polished Codex UI surfaces.":
+        "将过长的 SKILL.md 内容拆分到 references/ 目录；openai.yaml 字段仅在 skill 需要精良 Codex UI 呈现时才修复。",
+}
+
+_ACTIVE_REASON_ZH = {
+    "category is relatively scarce": "该分类 skill 数量较少",
+    "selected despite a saturated category": "从饱和分类中精选",
+    "no deterministic warnings": "无确定性警告",
+    "no heuristic debt": "无启发式 debt",
+    "not currently in a redundant family": "当前不在冗余家族中",
+}
+
+
+def _zh_governance_action(action: dict) -> tuple[str, str]:
+    """Return (zh_title, zh_details) for a governance action."""
+    title = _GOVERNANCE_TITLES_ZH.get(action["title"], action["title"])
+    details = _zh_governance_details(action)
+    return title, details
+
+
+def _zh_governance_details(action: dict) -> str:
+    import re
+    raw = action["details"]
+    # "N skills are invalid under deterministic checks."
+    m = re.match(r"(\d+) skills? are? invalid under deterministic checks\.", raw)
+    if m:
+        return f"{m.group(1)} 个 skill 在确定性检查中判为无效。"
+    # "N descriptions lack clear 'use when' style activation cues."
+    m = re.match(r"(\d+) descriptions? lack clear 'use when' style activation cues\.", raw)
+    if m:
+        return f"{m.group(1)} 个 skill 描述缺少明确的激活条件（'use when' 风格）。"
+    # "Category X currently contains N skills."
+    m = re.match(r"Category (\S+) currently contains (\d+) skills\.", raw)
+    if m:
+        return f"分类 {m.group(1)} 当前共有 {m.group(2)} 个 skill，已趋于饱和。"
+    # Redundancy details: "Shared category X with lexical similarity Y; ..."
+    if raw.startswith("Shared category"):
+        return _zh_redundancy_reason(raw)
+    return raw
+
+
+def _zh_redundancy_reason(reason: str) -> str:
+    import re
+    # "Shared category X with lexical similarity Y; shared anchors: A, B. review for redundancy or trigger conflict."
+    m = re.match(
+        r"Shared category (\S+) with lexical similarity ([\d.]+);(.*?)review for redundancy or trigger conflict\.",
+        reason,
+        re.DOTALL,
+    )
+    if not m:
+        return reason
+    category, similarity, anchors_part = m.group(1), m.group(2), m.group(3).strip()
+    anchor_str = ""
+    am = re.search(r"shared anchors?: (.+)\.", anchors_part)
+    if am:
+        anchor_str = f"，共享锚词：{am.group(1)}"
+    return f"同属 {category} 分类，词汇相似度 {similarity}{anchor_str}。请复核是否存在冗余或触发冲突。"
+
+
+def _zh_active_reason(reason: str) -> str:
+    """Translate a single active-set reason string."""
+    if reason.startswith("covers "):
+        label = reason[len("covers "):]
+        return f"覆盖{_translate_category(label)}"
+    return _ACTIVE_REASON_ZH.get(reason, reason)
 
 
 def _remediation_why(status: str, language: str) -> str:
