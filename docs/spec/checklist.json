@@ -3,24 +3,27 @@
     "id": "repo-controls",
     "title": "Stabilize canonical repo control files",
     "status": "done",
+    "spec_delta": true,
     "spec_refs": [
       "Problem and Goal",
       "Data and Interface Contracts",
-      "Implementation Phases or Rollout Steps"
+      "Implementation Phases or Rollout Steps",
+      "Spec and Checklist Relationship"
     ],
-    "notes": "docs/spec/spec.md, docs/spec/checklist.json, docs/spec/update_history, and README.md aligned for first version."
+    "notes": "docs/spec/spec.md, docs/spec/checklist.json, docs/spec/update_history, and README.md aligned for first version. Spec delta: update_history format changed to Markdown (v0.1.6); spec-to-checklist relationship section added. Re-verify that update_history tooling and README references reflect Markdown format."
   },
   {
     "id": "discovery-and-parse",
     "title": "Implement discovery and deterministic parsing",
     "status": "pending",
+    "spec_delta": true,
     "spec_refs": [
       "System Boundaries",
       "Runtime Flows",
       "Data and Interface Contracts",
       "Implementation Phases or Rollout Steps"
     ],
-    "notes": "Scan host-aware Codex or Claude skill roots, detect ecosystems, parse SKILL.md plus companion files, and include hard security/privacy checks. Host detection must handle the failure path: when host context is not detectable and no --ecosystem is provided, emit HOST_ECOSYSTEM_UNKNOWN and exit non-zero with a message directing the user to pass --ecosystem explicitly."
+    "notes": "Scan host-aware Codex or Claude skill roots, detect ecosystems, parse SKILL.md plus companion files, and include hard security/privacy checks. Spec delta (v0.1.5): HOST_ECOSYSTEM_UNKNOWN must exit non-zero with a message directing the user to pass --ecosystem explicitly."
   },
   {
     "id": "security-and-shell-safety",
@@ -38,36 +41,40 @@
     "id": "state-and-reporting",
     "title": "Implement runtime state writes and report generation",
     "status": "pending",
+    "spec_delta": true,
     "spec_refs": [
       "Ownership or Source of Truth",
       "Data and Interface Contracts",
       "Failure Cases and Acceptance",
       "Implementation Phases or Rollout Steps"
     ],
-    "notes": "Write audit run snapshots, ledgers, global index, and text/json/markdown reports without introducing any standalone external API dependency. Ledger note field is operator-owned and must never be overwritten by automated audit; change_log is append-only. Ledger files are only deleted by explicit user-initiated prune, never by automated audit."
+    "notes": "Write audit run snapshots, ledgers, global index, and text/json/markdown reports without introducing any standalone external API dependency. Spec delta (v0.1.5): ledger note field is operator-owned and must never be overwritten by automated audit; change_log is append-only; ledger files are only deleted by explicit user-initiated prune, never by automated audit."
   },
   {
     "id": "watch-and-hooks",
     "title": "Implement watch mode and git hook gate",
     "status": "pending",
+    "spec_delta": true,
     "spec_refs": [
       "Runtime Flows",
+      "Data and Interface Contracts",
       "Failure Cases and Acceptance",
       "Implementation Phases or Rollout Steps"
     ],
-    "notes": "Debounced watch-based auditing and deterministic git-hook blocking. Watch entry point is skill-auditor watch [path...]; process must handle SIGINT/SIGTERM for clean shutdown and must not prevent concurrent watch processes from running against overlapping roots."
+    "notes": "Debounced watch-based auditing and deterministic git-hook blocking. Spec delta (v0.1.5): watch entry point is skill-auditor watch [path...]; process must handle SIGINT/SIGTERM for clean shutdown; concurrent watch processes against overlapping roots are allowed and must not require cross-process locking."
   },
   {
     "id": "overlap-and-active-set",
     "title": "Implement clustering, heuristic analysis, and active-set recommendation",
     "status": "pending",
+    "spec_delta": true,
     "spec_refs": [
       "Core Decisions",
       "Data and Interface Contracts",
       "Failure Cases and Acceptance",
       "Implementation Phases or Rollout Steps"
     ],
-    "notes": "Keep deterministic and heuristic findings separate, prefer host-native enhancements, and cap recommendations at configured max. The cap is configurable via --active-set-max flag (default 30); implementation must read this from CLI args and not hardcode the value."
+    "notes": "Keep deterministic and heuristic findings separate, prefer host-native enhancements, and cap recommendations at configured max. Spec delta (v0.1.5): cap is configurable via --active-set-max flag (default 30); implementation must read this from CLI args and not hardcode the value."
   },
   {
     "id": "host-native-usage",

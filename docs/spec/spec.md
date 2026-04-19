@@ -60,6 +60,20 @@ Leaves unchanged:
 
 `skill_ledger` 是部分可重建的：自动生成字段可由重新审计恢复，人工填写的 `note` 和来源注释不能丢。
 
+## Spec and Checklist Relationship
+
+`docs/spec/spec.md` is the source of truth for design. `docs/spec/checklist.json` tracks implementation status only.
+
+The relationship is strictly one-way:
+
+- spec changes first; checklist reflects consequences
+- a checklist item never drives a spec change; only the reverse is valid
+- when a spec section changes, every affected checklist item must be updated in the same pass
+
+When a spec change affects an implementation area that is not yet done, the affected checklist item must set `"spec_delta": true` to signal that there are spec changes the implementation has not yet caught up with. When an implementation lands that resolves the delta, `spec_delta` is cleared.
+
+`spec_delta: true` does not block other checklist items. It is a flag for the implementer and reviewer to know that the spec and the code are temporarily out of sync in that area.
+
 ## Core Decisions
 
 1. **What:** 规范只有一个 canonical spec 文件：`docs/spec/spec.md`。
@@ -416,23 +430,39 @@ No automated audit run may delete or truncate a ledger file. The `skill_index.js
 | `id` | string | yes | stable work item id |
 | `title` | string | yes | short task name |
 | `status` | enum | yes | `pending / in_progress / blocked / done` |
+| `spec_delta` | bool | no | `true` when spec has changed for this area and the implementation has not yet caught up; omit or `false` otherwise |
 | `spec_refs` | string[] | yes | affected `docs/spec/spec.md` sections |
-| `notes` | string | no | execution note |
+| `notes` | string | no | execution note; when `spec_delta` is true, notes must describe what changed and what the implementation needs to do |
 
 ### Process object: `update_history` entry
 
 `docs/spec/update_history` is an append-only canonical revision log file inside the spec package.
 
-The canonical serialization format is **JSON Lines**: each record is one self-contained JSON object on its own line. This format allows atomic line-append without rewriting the file, and each line is independently parseable. Do not use JSON array format or Markdown. Existing entries must never be modified or removed.
+The canonical serialization format is **Markdown**. Each entry is a level-2 heading (`## vX.Y.Z — YYYY-MM-DD`) followed by bold-label fields. This format produces clean per-entry git diffs, renders naturally on GitHub, and satisfies the only tool-parsing need (cross-referencing version numbers by regex). Do not use JSON, JSON Lines, or JSON array format. Existing entries must never be modified or removed.
 
-| Field | Type | Required | Notes |
-|-------|------|----------|-------|
-| `version` | string | yes | design revision version, default format `major.minor.patch` |
-| `date` | string | yes | `YYYY-MM-DD` |
-| `summary` | string | yes | accepted change summary |
-| `rationale` | string | yes | why the change was accepted |
-| `spec_refs` | string[] | yes | affected `docs/spec/spec.md` sections |
-| `checklist_ids` | string[] | no | related checklist item ids |
+Entry template:
+
+```markdown
+## vX.Y.Z — YYYY-MM-DD
+
+**Summary:** one-sentence description of the accepted change
+
+**Rationale:** why the change was accepted
+
+**Spec refs:** comma-separated list of affected spec.md sections
+
+**Checklist ids:** comma-separated checklist item ids, or omit if none
+
+---
+```
+
+| Field | Required | Notes |
+|-------|----------|-------|
+| version heading | yes | `## vX.Y.Z — YYYY-MM-DD` |
+| Summary | yes | accepted change summary |
+| Rationale | yes | why the change was accepted |
+| Spec refs | yes | affected `docs/spec/spec.md` sections |
+| Checklist ids | no | related checklist item ids |
 
 ### State machine: audit run status
 
