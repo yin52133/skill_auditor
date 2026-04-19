@@ -8,6 +8,7 @@ from skill_auditor.analysis import (
     build_remediation_suggestions,
     build_trigger_findings,
 )
+from skill_auditor.frontmatter import parse_skill_markdown
 from skill_auditor.models import Finding, SkillInstance
 
 
