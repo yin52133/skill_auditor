@@ -20,7 +20,19 @@
       "Data and Interface Contracts",
       "Implementation Phases or Rollout Steps"
     ],
-    "notes": "Scan Codex and Claude skill roots, detect ecosystems, and parse SKILL.md plus companion files."
+    "notes": "Scan host-aware Codex or Claude skill roots, detect ecosystems, parse SKILL.md plus companion files, and include hard security/privacy checks."
+  },
+  {
+    "id": "security-and-shell-safety",
+    "title": "Implement secret, privacy, and suspicious execution detection",
+    "status": "pending",
+    "spec_refs": [
+      "Core Decisions",
+      "Data and Interface Contracts",
+      "Failure Cases and Acceptance",
+      "Implementation Phases or Rollout Steps"
+    ],
+    "notes": "Hard-fail embedded secrets, private data, curl-or-wget pipe-to-shell patterns, and direct opaque binary execution from hooks or shell snippets."
   },
   {
     "id": "state-and-reporting",
@@ -32,7 +44,7 @@
       "Failure Cases and Acceptance",
       "Implementation Phases or Rollout Steps"
     ],
-    "notes": "Write audit run snapshots, ledgers, global index, and text/json/markdown reports."
+    "notes": "Write audit run snapshots, ledgers, global index, and text/json/markdown reports without introducing any standalone external API dependency."
   },
   {
     "id": "watch-and-hooks",
@@ -55,6 +67,18 @@
       "Failure Cases and Acceptance",
       "Implementation Phases or Rollout Steps"
     ],
-    "notes": "Keep deterministic and heuristic findings separate and cap recommendations at configured max."
+    "notes": "Keep deterministic and heuristic findings separate, prefer host-native enhancements, and cap recommendations at configured max."
+  },
+  {
+    "id": "host-native-usage",
+    "title": "Keep the auditor directly usable in Codex and Claude Code without external API setup",
+    "status": "pending",
+    "spec_refs": [
+      "Core Decisions",
+      "Data and Interface Contracts",
+      "Failure Cases and Acceptance",
+      "Implementation Phases or Rollout Steps"
+    ],
+    "notes": "Do not add standalone api_key, endpoint, or audit-service requirements; optional semantic logic must use host-native surfaces or degrade to skipped."
   }
 ]

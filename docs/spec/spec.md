@@ -8,7 +8,7 @@ Codex 和 Claude Code 的 skill 集合会长期积累重复、过期、误触发
 
 In scope:
 
-- 扫描 `~/.codex/skills`、`~/.claude/skills` 及可识别插件 skill 根目录
+- 扫描 Codex 或 Claude Code 当前宿主生态下的 skill 根目录，并允许显式跨生态覆盖
 - 审计 `SKILL.md`、生态专属伴随文件、资源目录和可选 eval 痕迹
 - 区分 common / codex / claude 规则，不混成单一假规则集
 - 产出确定性 findings、启发式 findings、聚类关系、active-set 推荐
@@ -29,8 +29,8 @@ Out of scope:
 ```text
 User / Codex wrapper / Claude wrapper / Git hook / Watcher
   └── calls ──► skill-auditor CLI
-                  ├── reads ──► installed skill roots
-                  │               (~/.codex/... , ~/.claude/...)
+                  ├── reads ──► host-resolved installed skill roots
+                  │               (~/.codex/... or ~/.claude/...)
                   ├── reads ──► explicit target paths
                   ├── runs  ──► discovery + parsers + rules + analysis
                   ├── writes ──► runtime state root
@@ -90,6 +90,18 @@ Leaves unchanged:
    **Why:** 每次审计都联网会降低稳定性，并把一个静态工具变成易脆弱的同步器。
    **Reversal condition:** 远程源一致性成为明确产品目标，并有稳定的认证与失败语义设计。
 
+8. **What:** 全局 audit 的默认目标是当前宿主生态，不是 Codex 和 Claude 两边一起扫。
+   **Why:** 用户在 Codex 中调用全局审计时默认关心 Codex skills，在 Claude Code 中同理。默认跨生态扫描会引入不相关噪音，也会模糊当前会话的上下文。
+   **Reversal condition:** 产品未来明确把跨生态总览作为默认行为，并能证明这种默认不会降低信噪比。
+
+9. **What:** 安全和隐私约束是硬审计门槛，既约束 `skill-auditor` 自己的 skill / hook / docs 包，也约束被审计的目标 skill。
+   **Why:** skill、hook、script 本质上是可执行操作说明。硬编码密钥、私有数据、或可疑二进制执行模式不能作为“风格问题”处理，必须作为错误级问题处理。
+   **Reversal condition:** 未来如果引入显式 allowlist 机制，仍然只能降低误报，不得取消对 secrets、privacy、和可疑执行模式的硬审计。
+
+10. **What:** `skill-auditor` 必须能在 Codex 和 Claude Code 当前宿主中直接使用，不依赖单独配置的外部 API key、外部模型 endpoint、或独立审计服务。
+    **Why:** 这个工具的目标是成为两套宿主环境中的直接可用能力，不是再挂一个第三方 API 客户端或外部后端。额外 API key 和服务接口会增加部署成本、泄露面和失效模式。
+    **Reversal condition:** 只有当未来明确把外部服务模式定义成独立产品形态，并且与当前 host-native 模式分离时，才允许新增该能力。
+
 ## Runtime Flows
 
 ### Flow 1: Direct audit
@@ -114,9 +126,9 @@ parse SKILL.md and companions
 run deterministic rules
   │
   ▼
-run optional semantic analysis
+run optional host-native semantic analysis
   │
-  ├── backend unavailable? ──► mark semantic_status=skipped
+  ├── host-native analysis unavailable? ──► mark semantic_status=skipped
   │
   ▼
 write audit run snapshot
@@ -180,9 +192,9 @@ print warnings and allow commit / push
 ```text
 skill-auditor audit [path...]
   args.path              path[]   optional: skill dir, repo root, or explicit roots
-  flag.--all             bool     optional: scan default installed roots
+  flag.--all             bool     optional: scan default installed roots for the current host ecosystem
   flag.--format          enum     optional: text/json/markdown
-  flag.--ecosystem       enum     optional: codex/claude/unknown
+  flag.--ecosystem       enum     optional: host/codex/claude/both
 
 success → audit report emitted; exit 0 when no deterministic error blocks the requested mode
 error INVALID_ARGUMENT → exit non-zero; malformed flags or incompatible arguments
@@ -192,6 +204,100 @@ error ENGINE_BROKEN     → exit non-zero; internal invariant or unexpected fata
 ```
 
 Parsing failures inside a target skill are findings, not command-level fatal errors.
+
+Forbidden interface shape:
+
+- no `--api-key`
+- no `--token`
+- no `--endpoint`
+- no `--service-url`
+- no required environment variable for an external audit API
+
+Any optional semantic or clustering enhancement must use:
+
+- host-native capabilities exposed by Codex or Claude Code, or
+- purely local deterministic analysis
+
+It must not require a separate external API contract to be usable.
+
+Default target resolution rules:
+
+- wrapper invocation from Codex with `--all` and no explicit ecosystem override scans Codex skill roots only
+- wrapper invocation from Claude Code with `--all` and no explicit ecosystem override scans Claude skill roots only
+- direct CLI invocation outside a wrapper treats `host` as:
+  - `codex` when Codex host context is detectable
+  - `claude` when Claude host context is detectable
+  - error `HOST_ECOSYSTEM_UNKNOWN` when host context is not detectable and no explicit `--ecosystem` is provided
+- explicit `--ecosystem both` is the only mode that scans both ecosystems in one run
+
+### Shared audit design vs ecosystem-specific deltas
+
+Shared design:
+
+- skill discovery under one or more resolved roots
+- `SKILL.md` parsing and common frontmatter validation
+- normalized finding model
+- deterministic vs heuristic result split
+- ledger, index, cluster, and active-set persistence
+- watch and git-hook execution model
+- report rendering
+- host-native usability with no standalone external API dependency
+
+Codex-specific deltas:
+
+- default host roots are under the Codex installation layout
+- `agents/openai.yaml` is a first-class companion file
+- Codex-specific rule set checks `openai.yaml` shape, UI metadata constraints, and referenced icon assets
+- wrapper-triggered global audit scans Codex skills only unless explicitly overridden
+
+Claude-specific deltas:
+
+- default host roots are under the Claude Code installation and plugin layouts
+- `compatibility` and Claude plugin path hints are first-class ecosystem signals
+- Claude-specific rule set allows `compatibility` and checks Claude-only companion hints when present
+- wrapper-triggered global audit scans Claude skills only unless explicitly overridden
+
+Shared engine design requirement:
+
+- common logic stays in one engine
+- ecosystem-specific deltas must be declared explicitly in rules, root resolution, and companion-file parsing
+- reports must label whether a finding comes from common logic or an ecosystem-specific delta
+- host-enhanced logic must call through Codex or Claude Code native surfaces when available, and degrade to local-only behavior when unavailable
+- the product must remain usable without any separately provisioned API key or external audit endpoint
+
+### Common security and privacy constraints
+
+These constraints apply to:
+
+- `skill-auditor` repository content that ships as part of the audit package
+- any audited skill content under the selected audit scope
+
+Deterministic error patterns:
+
+- hardcoded API keys, tokens, passwords, private keys, or equivalent secrets
+- committed private or user-sensitive data that is not clearly synthetic or redacted
+- hooks, scripts, or shell snippets that pipe network output directly into a shell
+- hooks, scripts, or shell snippets that directly execute opaque binaries, downloaded artifacts, or temp/cache binaries from shell
+- hook or script flows that require hidden local credentials files without declaring that dependency as an explicit contract
+
+Allowed execution patterns:
+
+- interpreter-first execution of committed, reviewable text scripts such as `python file.py`, `node file.mjs`, or `bash file.sh`
+- explicit invocation of repository scripts when the target file is text, committed, and reviewable
+
+Suspicious execution examples that must be flagged:
+
+- `curl ... | bash`
+- `wget ... -O - | sh`
+- `./downloaded-tool`
+- `bash ./binary-blob`
+- executing binaries from temp, cache, or download paths without a reviewed wrapper contract
+
+Reporting requirement:
+
+- these findings are `deterministic_findings`
+- these findings use `severity=error`
+- any skill instance with an active finding from this constraint is excluded from the recommended active set
 
 ### Runtime entry: `skill-auditor hooks install`
 
@@ -393,6 +499,26 @@ Capability: Codex-only and Claude-only hard rules never cross-fire
   Expected: Codex-specific hard rules apply only to Codex skills or Codex-specific companion files
   Completion signal: cross-ecosystem hard-failure count = 0 in the mixed-ecosystem fixture matrix
 
+Capability: secrets and private data are hard-failed
+  Failure example: a skill or audit package file contains a real API key, private token, password, or non-redacted private user data
+  Expected: the audit emits an `error` finding with direct evidence and the affected instance is excluded from the recommended active set
+  Completion signal: secret-and-privacy false-negative count = 0 in the sensitive-fixture matrix
+
+Capability: the tool is directly usable from Codex and Claude Code without external API configuration
+  Failure example: running the auditor requires setting a separate API key or configuring a standalone audit endpoint before any audit can run
+  Expected: deterministic audit works with host-native context only; optional semantic analysis degrades to `skipped` when host-native capabilities are unavailable
+  Completion signal: external-api-required count = 0 in the host-setup fixture matrix
+
+Capability: global audit defaults to the current host ecosystem only
+  Failure example: running global audit from Codex also scans Claude skills without an explicit cross-ecosystem request
+  Expected: host-default audit scope resolves to Codex in Codex, Claude in Claude Code, and scans both only under explicit override
+  Completion signal: host-default cross-scan count = 0 in the host-context fixture matrix
+
+Capability: suspicious shell and binary execution patterns are hard-failed
+  Failure example: a hook runs `curl ... | bash` or executes an opaque downloaded binary directly from shell
+  Expected: the audit emits an `error` finding with the suspicious command pattern as evidence
+  Completion signal: suspicious-shell-binary false-negative count = 0 in the execution-pattern fixture matrix
+
 Capability: watch mode audits only relevant skill changes
   Failure example: editing an unrelated file triggers a duplicate audit
   Expected: only changes under owned skill files map to audits, and unchanged fingerprints are skipped
@@ -421,8 +547,8 @@ Phase 1: repository control files and runtime state contracts
   Blocks: parser and state-writing implementation depend on the runtime contract
 
 Phase 2: discovery, ecosystem detection, and deterministic parsing
-  Includes: root scanning, skill root detection, frontmatter parsing, companion-file discovery, common/Codex/Claude hard rules
-  Done when: mixed fixture roots produce stable instance inventories and deterministic findings across repeated runs
+  Includes: host-aware root scanning, skill root detection, frontmatter parsing, companion-file discovery, common/Codex/Claude hard rules, and security/privacy execution-pattern checks
+  Done when: mixed fixture roots produce stable instance inventories, host-default scans stay within the current ecosystem, secrets/privacy and suspicious execution patterns are hard-failed, and deterministic findings stay stable across repeated runs
   Blocks: reporting and hooks depend on normalized findings
 
 Phase 3: ledger, index, and report generation
@@ -436,8 +562,8 @@ Phase 4: watch mode and git-hook gate
   Blocks: semantic analysis is independent; active-set refresh depends on audit completion
 
 Phase 5: overlap analysis, active-set recommendation, and optional semantic pass
-  Includes: lexical overlap scoring, normalized summaries, optional model-backed review, recommendation ranking and cap enforcement
-  Done when: duplicate/overlap fixtures cluster correctly, semantic-unavailable runs degrade to `skipped`, and recommended sets never exceed the configured cap
+  Includes: lexical overlap scoring, normalized summaries, optional host-native review, recommendation ranking and cap enforcement
+  Done when: duplicate/overlap fixtures cluster correctly, host-native semantic-unavailable runs degrade to `skipped`, no external API setup is required, and recommended sets never exceed the configured cap
   Blocks: none; this phase completes the v1 surface
 
 ## References
