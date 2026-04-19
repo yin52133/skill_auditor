@@ -377,6 +377,8 @@ Watch process lifecycle:
 | `path` | string | yes | file or directory path |
 | `evidence` | string | yes | human-readable proof |
 | `suggested_fix` | string | no | direct next step |
+| `line_number` | integer | no | source line where the finding was detected |
+| `matched_text` | string | no | code snippet that triggered the finding (truncated to 120 chars) |
 
 ### Persistent object: Ledger entry
 

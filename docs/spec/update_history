@@ -76,6 +76,16 @@
 
 **Rationale:** Markdown is better suited for design change records whose primary consumer is human readers: git diffs are clean per entry, GitHub renders it naturally, and tool parsing needs (cross-referencing version numbers) are satisfied by simple regex. JSONL is better suited for high-frequency machine-written logs; this file is neither. Additionally, the spec-to-checklist relationship was implicit; it is now explicitly defined: spec is the source of truth, checklist tracks implementation status and flags spec deltas not yet implemented.
 
-**Spec refs:** Data and Interface Contracts, Ownership or Source of Truth
-
 **Checklist ids:** repo-controls
+
+---
+
+## v0.1.7 — 2026-04-19
+
+**Summary:** Add contextual line-level detail to Finding model and rewrite remediation suggestions with structured what/how output.
+
+**Rationale:** Remediation suggestions were generic template sentences that repeated the same text for all findings of the same rule_id, providing no actionable guidance. Findings now carry line_number and matched_text so reports can pinpoint the exact source location and code snippet. Remediation output is split into structured what (action) and how (context-aware steps with file path, line number, and replacement guidance).
+
+**Spec refs:** Data and Interface Contracts, Implementation Phases or Rollout Steps
+
+**Checklist ids:** contextual-remediation
