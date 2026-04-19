@@ -2,7 +2,7 @@
 
 ## Problem and Goal
 
-Codex 和 Claude Code 的 skill 集合会长期积累重复、过期、误触发和结构不合规的问题。当前缺少一个统一工具，能跨两套生态做客观审计、归类、维护记录和自动审计触发。这个设计定义 `skill-auditor`：一个共享 Python 内核、双生态薄包装、静态硬校验与启发式分析分层、并带维护账本与 active-set 推荐的技能审计系统。`SPEC.md` 是当前完整设计；`checklist.json` 和 `update_history` 负责后续实现进度与设计变更记录。
+Codex 和 Claude Code 的 skill 集合会长期积累重复、过期、误触发和结构不合规的问题。当前缺少一个统一工具，能跨两套生态做客观审计、归类、维护记录和自动审计触发。这个设计定义 `skill-auditor`：一个共享 Python 内核、双生态薄包装、静态硬校验与启发式分析分层、并带维护账本与 active-set 推荐的技能审计系统。`docs/spec/spec.md` 是当前完整设计；`docs/spec/checklist.json` 和 `docs/spec/update_history` 负责后续实现进度与设计变更记录。
 
 ## Scope and Non-Goals
 
@@ -14,7 +14,7 @@ In scope:
 - 产出确定性 findings、启发式 findings、聚类关系、active-set 推荐
 - 维护 per-skill ledger 和全局 index
 - 提供 `watch` 与 git hook 两种自动审计触发方式
-- 维护本仓库的 `SPEC.md`、`checklist.json`、`update_history` 三类控制文件边界
+- 维护本仓库的 `docs/spec/spec.md`、`docs/spec/checklist.json`、`docs/spec/update_history` 三类控制文件边界
 
 Out of scope:
 
@@ -49,9 +49,9 @@ Leaves unchanged:
 | Layer | Owns | Rebuildable |
 |-------|------|-------------|
 | Installed skill files | skill 的真实内容与结构 | No |
-| `SPEC.md` | 本仓库当前完整设计 | No |
-| `checklist.json` | 本仓库实现进度状态 | No |
-| `update_history` | 本仓库设计变更记录 | No |
+| `docs/spec/spec.md` | 本仓库当前完整设计 | No |
+| `docs/spec/checklist.json` | 本仓库实现进度状态 | No |
+| `docs/spec/update_history` | 本仓库设计变更记录 | No |
 | `skill_ledger/<instance_id>.json` | 每个 skill instance 的维护记录与审计摘要 | Partial |
 | `skill_index.json` | skill instance 索引与聚合视图 | Yes |
 | `clusters.json` | 重叠/重复聚类结果 | Yes |
@@ -62,11 +62,11 @@ Leaves unchanged:
 
 ## Core Decisions
 
-1. **What:** 规范只有一个 canonical spec 文件：`SPEC.md`。
-   **Why:** 这个项目会持续迭代；完整设计必须始终能单独阅读，不依赖历史讨论。进度状态放 `checklist.json`，设计变更记录放单文件 `update_history`。
+1. **What:** 规范只有一个 canonical spec 文件：`docs/spec/spec.md`。
+   **Why:** 这个项目会持续迭代；完整设计必须始终能单独阅读，不依赖历史讨论。进度状态放 `docs/spec/checklist.json`，设计变更记录放单文件 `docs/spec/update_history`。
    **Reversal condition:** 仓库未来建立了更强、已被全仓接受的 canonical 设计文档位置。
 
-2. **What:** `update_history` 是仓库根目录下的单文件，不是目录；它必须保存带版本号的更新记录。
+2. **What:** `docs/spec/update_history` 是 spec 包里的单文件，不是目录；它必须保存带版本号的更新记录。
    **Why:** review checklist 要求每个用途只有一个 canonical source。这里真正重要的是 canonical 单文件、版本信息和更新记录；具体序列化格式不是关键约束。
    **Reversal condition:** revision log 规模增长到单文件不可审阅，并且仓库明确接受新的 canonical 位置。
 
@@ -269,12 +269,12 @@ error INSTALL_FAILED    → exit non-zero; hook write failed
 | `id` | string | yes | stable work item id |
 | `title` | string | yes | short task name |
 | `status` | enum | yes | `pending / in_progress / blocked / done` |
-| `spec_refs` | string[] | yes | affected `SPEC.md` sections |
+| `spec_refs` | string[] | yes | affected `docs/spec/spec.md` sections |
 | `notes` | string | no | execution note |
 
 ### Process object: `update_history` entry
 
-`update_history` is an append-only canonical revision log file at repository root.
+`docs/spec/update_history` is an append-only canonical revision log file inside the spec package.
 
 The implementation may serialize it as JSON, JSON Lines, or Markdown with machine-readable frontmatter. The required contract is the record content, not the encoding.
 
@@ -284,7 +284,7 @@ The implementation may serialize it as JSON, JSON Lines, or Markdown with machin
 | `date` | string | yes | `YYYY-MM-DD` |
 | `summary` | string | yes | accepted change summary |
 | `rationale` | string | yes | why the change was accepted |
-| `spec_refs` | string[] | yes | affected `SPEC.md` sections |
+| `spec_refs` | string[] | yes | affected `docs/spec/spec.md` sections |
 | `checklist_ids` | string[] | no | related checklist item ids |
 
 ### State machine: audit run status
@@ -304,12 +304,16 @@ Relevant tree:
 ```text
 Root: repository root
 
-SPEC.md
-checklist.json
-update_history
-ref/
-src/skill_auditor/
+README.md
+docs/
+  spec/
+    spec.md
+    checklist.json
+    update_history
+    references.md
+hooks/
 skills/
+src/skill_auditor/
 tests/
 ```
 
@@ -317,10 +321,12 @@ Ownership rules:
 
 | Path | Responsibility |
 |------|----------------|
-| `SPEC.md` | canonical complete design |
-| `checklist.json` | repository execution tracker |
-| `update_history` | append-only design change log |
-| `ref/` | upstream references and local analysis notes |
+| `README.md` | project entrypoint |
+| `docs/spec/spec.md` | canonical complete design |
+| `docs/spec/checklist.json` | repository execution tracker |
+| `docs/spec/update_history` | append-only design change log |
+| `docs/spec/references.md` | committed reference analysis |
+| `hooks/` | hook templates and install helpers |
 | `src/skill_auditor/` | executable implementation |
 | `skills/` | Codex and Claude wrapper skills |
 | `tests/` | unit and integration tests |
@@ -351,9 +357,9 @@ Ownership rules:
 
 | Path or object | Model | Behavior |
 |----------------|-------|----------|
-| `SPEC.md` | rewrite-in-place | current accepted design only |
-| `checklist.json` | rewrite-in-place | current execution status only |
-| `update_history` | append-only | prior accepted changes remain |
+| `docs/spec/spec.md` | rewrite-in-place | current accepted design only |
+| `docs/spec/checklist.json` | rewrite-in-place | current execution status only |
+| `docs/spec/update_history` | append-only | prior accepted changes remain |
 | `skill_index.json` | rewrite-in-place | rebuilt after each audit |
 | `clusters.json` | rewrite-in-place | rebuilt after cluster pass |
 | `active_set.json` | rewrite-in-place | rebuilt after recommendation pass |
@@ -410,7 +416,7 @@ Capability: duplicate and overlap analysis keeps logical identity and installed 
 ## Implementation Phases or Rollout Steps
 
 Phase 1: repository control files and runtime state contracts
-  Includes: `SPEC.md` canonicalization, `checklist.json` schema, `update_history` schema, runtime state path contract
+  Includes: `docs/spec/spec.md` canonicalization, `docs/spec/checklist.json` schema, `docs/spec/update_history` schema, runtime state path contract
   Done when: repository and runtime ownership rules are represented in tests and no path-purpose ambiguity remains
   Blocks: parser and state-writing implementation depend on the runtime contract
 
@@ -436,7 +442,7 @@ Phase 5: overlap analysis, active-set recommendation, and optional semantic pass
 
 ## References
 
-### `ref/skill-creator-analysis.md`
+### `docs/spec/references.md`
 
 What it contributes: extracted common rules, Codex-only rules, Claude-only rules, and the required separation between deterministic and heuristic checks.
 Maps to: `Ownership or Source of Truth`, `Core Decisions`, `Data and Interface Contracts`

@@ -8,7 +8,7 @@
       "Data and Interface Contracts",
       "Implementation Phases or Rollout Steps"
     ],
-    "notes": "SPEC.md, checklist.json, update_history, and README.md aligned for first version."
+    "notes": "docs/spec/spec.md, docs/spec/checklist.json, docs/spec/update_history, and README.md aligned for first version."
   },
   {
     "id": "discovery-and-parse",

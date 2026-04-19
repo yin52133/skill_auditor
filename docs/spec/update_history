@@ -14,5 +14,20 @@
     "checklist_ids": [
       "repo-controls"
     ]
+  },
+  {
+    "version": "0.1.1",
+    "date": "2026-04-19",
+    "summary": "Move the canonical spec package under docs/spec and align the repository top-level structure.",
+    "rationale": "The project should expose docs, skills, hooks, and README.md at the repository root. The previous root-level spec files were a packaging mistake, not a product requirement.",
+    "spec_refs": [
+      "Problem and Goal",
+      "Ownership or Source of Truth",
+      "Core Decisions",
+      "Data and Interface Contracts"
+    ],
+    "checklist_ids": [
+      "repo-controls"
+    ]
   }
 ]

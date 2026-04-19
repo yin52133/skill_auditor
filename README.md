@@ -4,10 +4,10 @@
 
 Current repository state:
 
-- canonical design lives in [`SPEC.md`](./SPEC.md)
-- implementation tracking lives in [`checklist.json`](./checklist.json)
-- design revision history lives in [`update_history`](./update_history)
-- upstream reference analysis lives in [`ref/skill-creator-analysis.md`](./ref/skill-creator-analysis.md)
+- canonical design lives in [`docs/spec/spec.md`](./docs/spec/spec.md)
+- implementation tracking lives in [`docs/spec/checklist.json`](./docs/spec/checklist.json)
+- design revision history lives in [`docs/spec/update_history`](./docs/spec/update_history)
+- upstream reference analysis lives in [`docs/spec/references.md`](./docs/spec/references.md)
 
 ## Goal
 
@@ -49,10 +49,12 @@ Not included yet:
 
 | Path | Purpose |
 |------|---------|
-| `SPEC.md` | current complete design |
-| `checklist.json` | implementation tracker for this repo |
-| `update_history` | append-only design revision log |
-| `ref/` | local reference analysis and ignored upstream clones |
+| `docs/spec/spec.md` | current complete design |
+| `docs/spec/checklist.json` | implementation tracker for this repo |
+| `docs/spec/update_history` | append-only design revision log |
+| `docs/spec/references.md` | committed reference analysis |
+| `skills/` | future Codex and Claude wrapper skills |
+| `hooks/` | future hook templates and install helpers |
 | `.gitignore` | local repo ignore rules, including cloned references |
 
 ## Reference Sources
@@ -62,7 +64,7 @@ The design is based on these upstream references, cloned locally under `ref/` an
 - OpenAI Codex sample skill-creator
 - Anthropic skill-creator
 
-The extracted cross-reference notes are committed in `ref/skill-creator-analysis.md`.
+The extracted cross-reference notes are committed in `docs/spec/references.md`.
 
 ## Privacy and Security Notes
 
