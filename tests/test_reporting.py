@@ -110,3 +110,84 @@ def test_render_markdown_with_findings():
     assert "`error`: `1`" in result
     assert "`warn`: `1`" in result
     assert "Deterministic Findings" in result
+
+
+# --- helper function tests ---
+
+def test_translate_category_zh():
+    from skill_auditor.reporting import _translate_category
+    assert _translate_category("Document workflows") == "文档工作流"
+    assert _translate_category("Mobile development") == "移动开发"
+    assert _translate_category("Unknown category") == "Unknown category"
+
+
+def test_remediation_why_en():
+    from skill_auditor.reporting import _remediation_why
+    result = _remediation_why("invalid", "en", issues=["security.shell.pipe_to_shell"])
+    assert "pipe-to-shell" in result.lower()
+
+
+def test_remediation_why_zh():
+    from skill_auditor.reporting import _remediation_why
+    result = _remediation_why("invalid", "zh", issues=["security.shell.pipe_to_shell"])
+    assert len(result) > 0
+
+
+def test_remediation_why_fallback():
+    from skill_auditor.reporting import _remediation_why
+    result = _remediation_why("review", "en", issues=["unknown.rule.id"])
+    assert len(result) > 0
+
+
+def test_zh_redundancy_reason():
+    from skill_auditor.reporting import _zh_redundancy_reason
+    reason = "Shared category documents with lexical similarity 0.65; shared anchors: docx, files. review for redundancy or trigger conflict."
+    result = _zh_redundancy_reason(reason)
+    assert "docx" in result
+
+
+def test_zh_active_reason():
+    from skill_auditor.reporting import _zh_active_reason
+    assert _zh_active_reason("covers Document workflows") == "覆盖文档工作流"
+    assert _zh_active_reason("no deterministic warnings") == "无确定性警告"
+    assert _zh_active_reason("unknown reason") == "unknown reason"
+
+
+def test_zh_governance_action_invalid():
+    from skill_auditor.reporting import _zh_governance_action
+    action = {
+        "title": "Repair invalid skills before expanding active use",
+        "details": "3 skills are invalid under deterministic checks.",
+        "skill_keys": ["a", "b"],
+    }
+    title, details = _zh_governance_action(action)
+    assert "修复" in title or "无效" in title or "Repair" in title
+    assert "3" in details
+
+
+def test_build_recommendations_with_findings():
+    from skill_auditor.reporting import build_report_summary, _build_recommendations
+    inst = _inst()
+    findings = [_finding(severity="error")]
+    report = _report(instances=[inst], det=findings)
+    summary = build_report_summary(report)
+    recs = _build_recommendations(report, summary, [], language="en")
+    assert len(recs) > 0
+
+
+def test_render_json_includes_summary():
+    report = _report()
+    result = render_json(report)
+    data = json.loads(result)
+    assert "summary" in data
+    assert "validity" in data["summary"]
+    assert "compliance" in data["summary"]
+
+
+def test_render_text_with_findings():
+    inst = _inst()
+    findings = [_finding(severity="error")]
+    report = _report(instances=[inst], det=findings)
+    result = render_text(report)
+    assert "deterministic_findings: 1" in result
+    assert "test.rule" in result
