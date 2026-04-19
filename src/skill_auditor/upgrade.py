@@ -1,12 +1,10 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
 import tempfile
 from pathlib import Path
 
-from .discovery import _detect_git_source, classify_source_kind, default_roots_for, resolve_ecosystems
 from .models import UpgradeCandidate
 from .state import StateManager
 from .utils import compute_directory_fingerprint, utc_now
@@ -22,7 +20,6 @@ def check_upgrades(
 ) -> list[UpgradeCandidate]:
     state = StateManager()
     candidates: list[UpgradeCandidate] = []
-    ecosystems = resolve_ecosystems(ecosystem) if ecosystem else []
     ledger_dir = state.state_root / "skill_ledger"
 
     if not ledger_dir.exists():
