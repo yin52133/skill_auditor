@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -15,6 +16,43 @@ set -euo pipefail
 repo="$(cd "$(dirname "$0")/../.." && pwd)"
 exec skill-auditor hook-run --repo "$repo" --hook {hook_name}
 """
+
+CLAUDE_POST_EDIT_TEMPLATE = """#!/usr/bin/env bash
+set -euo pipefail
+INPUT=$(cat)
+FILE=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+[ -z "$FILE" ] && exit 0
+
+CLAUDE_SKILLS="${CLAUDE_HOME:-$HOME/.claude}/skills"
+case "$FILE" in
+  "$CLAUDE_SKILLS"/*) ;;
+  *) exit 0 ;;
+esac
+
+SKILL_DIR="$FILE"
+while [ "$SKILL_DIR" != "$CLAUDE_SKILLS" ] && [ ! -f "$SKILL_DIR/SKILL.md" ]; do
+  SKILL_DIR=$(dirname "$SKILL_DIR")
+done
+[ ! -f "$SKILL_DIR/SKILL.md" ] && exit 0
+
+skill-auditor audit --format text --ecosystem claude "$SKILL_DIR" >&2 || true
+exit 0
+"""
+
+CLAUDE_HOOKS_CONFIG = {
+    "PostToolUse": [
+        {
+            "matcher": "Edit|Write",
+            "hooks": [
+                {
+                    "type": "command",
+                    "command": None,
+                    "timeout": 30,
+                }
+            ],
+        }
+    ],
+}
 
 
 def install_hooks(repo: Path) -> None:
@@ -87,3 +125,45 @@ def run_hook_command(*, repo: Path, hook_name: str, ecosystem_request: str | Non
         return 1
     print(f"{hook_name}: no deterministic blocking findings.")
     return 0
+
+
+def install_claude_hooks(scope: str) -> Path:
+    if scope == "project":
+        settings_dir = Path.cwd() / ".claude"
+    else:
+        settings_dir = Path(os.environ.get("CLAUDE_HOME", Path.home() / ".claude")).expanduser()
+
+    settings_path = settings_dir / "settings.json"
+    hooks_dir = settings_dir / "hooks"
+    hooks_dir.mkdir(parents=True, exist_ok=True)
+
+    script_path = hooks_dir / "skill-auditor-post-edit.sh"
+    script_path.write_text(CLAUDE_POST_EDIT_TEMPLATE, encoding="utf-8")
+    script_path.chmod(0o755)
+
+    config = CLAUDE_HOOKS_CONFIG.copy()
+    config["PostToolUse"][0]["hooks"][0]["command"] = str(script_path)
+
+    if settings_path.exists():
+        existing = json.loads(settings_path.read_text(encoding="utf-8"))
+    else:
+        settings_dir.mkdir(parents=True, exist_ok=True)
+        existing = {}
+
+    existing_hooks = existing.get("hooks", {})
+    for event, entries in config.items():
+        if event not in existing_hooks:
+            existing_hooks[event] = entries
+        else:
+            existing_commands = {
+                h.get("command") for entry in existing_hooks[event] for h in entry.get("hooks", [])
+            }
+            for entry in entries:
+                for hook in entry.get("hooks", []):
+                    if hook.get("command") not in existing_commands:
+                        existing_hooks[event].append(entry)
+                        break
+
+    existing["hooks"] = existing_hooks
+    settings_path.write_text(json.dumps(existing, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    return settings_path

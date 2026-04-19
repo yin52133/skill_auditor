@@ -209,3 +209,7 @@ __marimo__/
 # Local upstream reference clones
 ref/openai-codex/
 ref/anthropics-skills/
+
+# Local audit/runtime artifacts
+autoresearch-results/
+docs/superpowers/

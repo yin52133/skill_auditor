@@ -75,3 +75,55 @@ def test_hook_runner_blocks_only_deterministic_errors(tmp_path, monkeypatch):
     )
     assert blocked.block is True
     assert blocked.error_count == 1
+
+
+def test_install_claude_hooks_writes_settings_and_script(tmp_path, monkeypatch):
+    import json
+
+    claude_home = tmp_path / ".claude"
+    claude_home.mkdir()
+    claude_home.joinpath("settings.json").write_text("{}\n", encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_HOME", str(claude_home))
+
+    from skill_auditor.hooks import install_claude_hooks
+
+    settings_path = install_claude_hooks("user")
+
+    assert settings_path == claude_home / "settings.json"
+    data = json.loads(settings_path.read_text(encoding="utf-8"))
+    assert "hooks" in data
+    assert "PostToolUse" in data["hooks"]
+    assert data["hooks"]["PostToolUse"][0]["matcher"] == "Edit|Write"
+
+    script = claude_home / "hooks" / "skill-auditor-post-edit.sh"
+    assert script.exists()
+    assert script.stat().st_mode & 0o111
+    assert "skill-auditor audit" in script.read_text(encoding="utf-8")
+
+
+def test_install_claude_hooks_merges_existing_hooks(tmp_path, monkeypatch):
+    import json
+
+    claude_home = tmp_path / ".claude"
+    claude_home.mkdir()
+    existing = {
+        "model": "sonnet",
+        "hooks": {
+            "PostToolUse": [
+                {"matcher": "Bash", "hooks": [{"type": "command", "command": "echo existing"}]}
+            ]
+        },
+    }
+    claude_home.joinpath("settings.json").write_text(json.dumps(existing), encoding="utf-8")
+    monkeypatch.setenv("CLAUDE_HOME", str(claude_home))
+
+    from skill_auditor.hooks import install_claude_hooks
+
+    install_claude_hooks("user")
+
+    data = json.loads((claude_home / "settings.json").read_text(encoding="utf-8"))
+    assert data["model"] == "sonnet"
+    post_entries = data["hooks"]["PostToolUse"]
+    assert len(post_entries) == 2
+    assert post_entries[0]["matcher"] == "Bash"
+    assert post_entries[1]["matcher"] == "Edit|Write"

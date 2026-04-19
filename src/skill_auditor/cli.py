@@ -6,7 +6,7 @@ from pathlib import Path
 
 from .engine import run_audit
 from .errors import SkillAuditorError
-from .hooks import install_hooks, run_hook_command
+from .hooks import install_hooks, install_claude_hooks, run_hook_command
 from .reporting import render_report
 from .utils import atomic_write_text
 from .watch import run_watch_loop
@@ -43,6 +43,9 @@ def build_parser() -> argparse.ArgumentParser:
     hooks_subparsers = hooks_parser.add_subparsers(dest="hooks_command", required=True)
     hooks_install = hooks_subparsers.add_parser("install")
     hooks_install.add_argument("--repo", required=True)
+
+    hooks_install_claude = hooks_subparsers.add_parser("install-claude")
+    hooks_install_claude.add_argument("--scope", choices=["user", "project"], default="user")
 
     hook_run = subparsers.add_parser("hook-run")
     hook_run.add_argument("--repo", required=True)
@@ -96,7 +99,11 @@ def main(argv: list[str] | None = None) -> int:
             )
 
         if args.command == "hooks":
-            install_hooks(Path(args.repo).expanduser().resolve())
+            if args.hooks_command == "install":
+                install_hooks(Path(args.repo).expanduser().resolve())
+            elif args.hooks_command == "install-claude":
+                settings_path = install_claude_hooks(args.scope)
+                print(f"Claude Code hooks installed. Settings: {settings_path}")
             return 0
 
         if args.command == "hook-run":
